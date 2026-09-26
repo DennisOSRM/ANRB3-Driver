@@ -1,0 +1,31 @@
+[package]
+name = "anrb-map"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+description = "Live map bridge for the AirNav RadarBox driver"
+license = "BSD-2-Clause"
+
+[lib]
+name = "anrb_map"
+path = "src/lib.rs"
+
+[[bin]]
+name = "anrb-map"
+path = "src/main.rs"
+
+[dependencies]
+# The decoder and tracker, without libusb: the bridge reads a feed over TCP
+# rather than the device.
+anrb = { path = "../driver", default-features = false }
+# Deflate for the JSON the page polls, which compresses about eight to one.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# HTTPS, both for serving the page and for asking hexdb.io. The ring provider
+# rather than the default aws-lc-rs, which wants cmake to build.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# Reading a certificate and its key out of the PEM files as handed over.
+rustls-pemfile = "2"
+# Mozilla's root certificates, compiled in, for the hexdb lookups. The
+# machine's own store is deliberately not used: a receiver on a stripped-down
+# image may have no /etc/ssl at all.
+webpki-roots = "1"

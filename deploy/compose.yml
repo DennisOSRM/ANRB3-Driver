@@ -1,0 +1,56 @@
+# The receiver and its map, on the machine the RadarBox is plugged into.
+#
+# The images are built elsewhere and loaded here by deploy/ship.sh, so this
+# file only runs them: nothing is built or pulled on this machine.
+#
+#     docker compose up -d
+#
+# The driver holds the USB device and serves the feeds; the bridge reads Beast
+# from it inside the compose network and serves the map on 127.0.0.1:8088,
+# which is for nginx to proxy - see nginx.conf.
+
+services:
+  anrb:
+    image: anrb:latest
+    pull_policy: never
+    # An unprivileged user, in the group the udev rule gives the RadarBox's
+    # device node to. ship.sh writes that group's number into .env beside this
+    # file; see deploy/99-anrb.rules. The image sets the same user; naming it
+    # here keeps the container off root even with an image that does not.
+    user: "10001:10001"
+    group_add:
+      - "${ANRB_USB_GID:?the anrb group's number, from getent group anrb}"
+    container_name: anrb
+    restart: unless-stopped
+    # The whole USB bus, not one device node: the driver power-cycles the box
+    # when it finds it wedged, and it comes back as a different device number.
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      # The host's time zone: BaseStation timestamps are local time by
+      # convention, and so are the log lines. Without it they are UTC.
+      - /etc/localtime:/etc/localtime:ro
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    # Feeders on other machines read these. Drop the lines to keep them local.
+    ports:
+      - "30003:30003"
+      - "30005:30005"
+
+  anrb-map:
+    image: anrb-map:latest
+    pull_policy: never
+    # The same user as the image's, kept here for the same reason as above.
+    user: "10001:10001"
+    container_name: anrb-map
+    restart: unless-stopped
+    depends_on:
+      - anrb
+    volumes:
+      - anrb-map-cache:/var/cache/anrb-map
+      - /etc/localtime:/etc/localtime:ro
+    # Loopback only: nginx is the way in.
+    ports:
+      - "127.0.0.1:8088:8080"
+
+volumes:
+  anrb-map-cache:

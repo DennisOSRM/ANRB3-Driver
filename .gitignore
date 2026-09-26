@@ -1,0 +1,15 @@
+# Build output
+/target
+
+# MSVC Windows builds of rustc generate these, which store debugging information
+*.pdb
+
+# RustRover
+/.idea/
+
+# Capture files, not in the repository. Three integration tests read them
+# (bursts.bin and tuning_15min_v2.raw) and pass without checking anything when
+# they are absent. anrb-replay reads tuning_15min_v2.raw by default.
+/captures/
+
+/CLEANUP_PLAN.md

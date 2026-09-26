@@ -1,0 +1,12 @@
+# The AirNav RadarBox, readable and writable by the group `anrb` rather than
+# by root alone, so the driver can run as an ordinary user. The rule applies
+# again when the device re-enumerates - after a port reset, or a replug - so
+# access survives the driver power-cycling the box.
+#
+# deploy/ship.sh copies this file to ~/anrb/99-anrb.rules on the target. Then,
+# once, on the target:
+#
+#   sudo groupadd --system anrb
+#   sudo cp ~/anrb/99-anrb.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="a2e0", GROUP="anrb", MODE="0660"

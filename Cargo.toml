@@ -1,0 +1,21 @@
+# The driver and the map bridge are separate crates: the driver has no use for
+# TLS or an HTTP stack, and the bridge has none for libusb.
+[workspace]
+members = ["driver", "bridge"]
+resolver = "2"
+
+# Members take this with `rust-version.workspace = true`. The code uses
+# `iter::repeat_n` and `Option::is_none_or`, both stable since 1.82.
+[workspace.package]
+rust-version = "1.82"
+
+[profile.release]
+opt-level = 3
+# Measured on a 15-minute capture, interleaved: one codegen unit is worth about
+# 2% of decode time. LTO is not - thin LTO lands in the same band and fat LTO is
+# slightly slower, because the hot path is already inside one crate with nothing
+# to inline across.
+codegen-units = 1
+# Kept so a profiler can name the symbols in the hot path. It costs image size
+# rather than speed, and the Dockerfile turns it off for what it ships.
+debug = true

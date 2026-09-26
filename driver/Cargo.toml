@@ -1,0 +1,40 @@
+[package]
+name = "anrb"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+description = "AirNav RadarBox driver and Mode-S/ADS-B decoder"
+license = "BSD-2-Clause"
+
+[features]
+default = ["usb"]
+# The decoder is pure Rust; only the driver needs libusb. Turning this off
+# leaves a dependency-free library that builds for any target, which is how the
+# bridge depends on it.
+usb = ["dep:rusb", "dep:chrono", "dep:ctrlc", "dep:terminal_size"]
+# Coarse phase timers in the decode loop, plus the soft-search and memo
+# counters. None of it runs in a default build.
+profile = []
+# Sub-phase timers inside the demodulator and the soft search. Many more rdtsc
+# pairs, useful on their own.
+profile_fine = ["profile"]
+
+[dependencies]
+rusb = { version = "0.9", optional = true }
+# Local time for the UNLOCK argument, SBS timestamps and the server log. The
+# standard library has no time zones; this is the portable way to get one, and
+# it agrees with localtime_r to the second across both DST changes.
+chrono = { version = "0.4", optional = true, default-features = false, features = ["clock", "std"] }
+# SIGINT, SIGTERM and SIGHUP on Unix, Ctrl-C and close on Windows. The handler
+# runs on a thread of its own rather than in a signal context, so stopping
+# cleanly needs no async-signal-safe code.
+ctrlc = { version = "3", optional = true, features = ["termination"] }
+# The dashboard's size, on Unix and Windows alike.
+terminal_size = { version = "0.4", optional = true }
+
+# Every file in src/bin is a binary without being listed; anrb-rx is listed only
+# because it needs a feature that can be turned off.
+[[bin]]
+name = "anrb-rx"
+path = "src/bin/anrb-rx.rs"
+required-features = ["usb"]
