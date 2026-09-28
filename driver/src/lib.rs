@@ -20,13 +20,16 @@
 //! The output is a stream of [`Frame`]s:
 //!
 //! ```no_run
-//! use anrb::RadarBox;
+//! # #[cfg(feature = "usb")]
 //! # fn main() -> std::io::Result<()> {
+//! use anrb::RadarBox;
 //! for frame in RadarBox::open()?.frames() {
 //!     let frame = frame?;
 //!     println!("{} DF{} {:06X}", frame.hex(), frame.df(), frame.icao());
 //! }
 //! # Ok(()) }
+//! # #[cfg(not(feature = "usb"))]
+//! # fn main() {}
 //! ```
 //!
 //! The same decoder runs over recorded bytes with no hardware:
