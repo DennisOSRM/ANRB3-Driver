@@ -13,3 +13,6 @@
 /captures/
 
 /CLEANUP_PLAN.md
+
+# npm install for the page formatter
+/node_modules/

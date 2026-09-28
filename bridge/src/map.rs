@@ -25,11 +25,13 @@ pub const INACTIVE: f64 = 60.0;
 /// Thinning: a point closer than this in time and in distance to the last one
 /// says nothing the map can draw.
 const MIN_DT: f64 = 2.0;
-const MIN_MOVE: f64 = 0.0004;          // degrees, roughly 40 m
+const MIN_MOVE: f64 = 0.0004; // degrees, roughly 40 m
 
 /// Seconds since the epoch, which is the clock the page draws on.
 pub fn now() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64())
 }
 
 struct Point {
@@ -120,7 +122,11 @@ impl State {
     pub fn counters(&self, messages: u64, bad_parity: u64, implausible: u64, resyncs: u64) {
         let mut s = lock(&self.inner);
         s.messages = messages;
-        s.checks = Checks { bad_parity, implausible, resyncs };
+        s.checks = Checks {
+            bad_parity,
+            implausible,
+            resyncs,
+        };
     }
 
     /// A position the tracker has published.
@@ -133,12 +139,21 @@ impl State {
             r.alt = Some(a);
         }
         if let Some(p) = r.pts.last() {
-            if now - p.t < MIN_DT && (lon - p.lon).abs() < MIN_MOVE && (lat - p.lat).abs() < MIN_MOVE {
+            if now - p.t < MIN_DT
+                && (lon - p.lon).abs() < MIN_MOVE
+                && (lat - p.lat).abs() < MIN_MOVE
+            {
                 return;
             }
         }
         let alt = r.alt;
-        r.pts.push(Point { seq: seq + 1, t: now, lon, lat, alt });
+        r.pts.push(Point {
+            seq: seq + 1,
+            t: now,
+            lon,
+            lat,
+            alt,
+        });
         s.seq += 1;
     }
 
@@ -292,7 +307,10 @@ fn extra(a: &Aircraft) -> String {
     }
     if let Some(s) = a.airspeed {
         if let Some(kt) = s.knots {
-            f.push(format!("\"{}\":{kt}", if s.true_airspeed { "tas" } else { "ias" }));
+            f.push(format!(
+                "\"{}\":{kt}",
+                if s.true_airspeed { "tas" } else { "ias" }
+            ));
         }
         if let Some(h) = s.heading {
             f.push(format!("\"mag_heading\":{h:.1}"));
@@ -305,7 +323,10 @@ fn extra(a: &Aircraft) -> String {
         let mut g: Vec<String> = Vec::new();
         if let Some(alt) = t.altitude {
             g.push(format!("\"alt\":{alt}"));
-            g.push(format!("\"alt_source\":\"{}\"", if t.altitude_fms { "FMS" } else { "MCP/FCU" }));
+            g.push(format!(
+                "\"alt_source\":\"{}\"",
+                if t.altitude_fms { "FMS" } else { "MCP/FCU" }
+            ));
         }
         if let Some(q) = t.qnh {
             g.push(format!("\"qnh\":{q:.1}"));
@@ -314,15 +335,33 @@ fn extra(a: &Aircraft) -> String {
             g.push(format!("\"heading\":{h:.1}"));
         }
         if let Some(m) = t.modes {
-            let on: Vec<&str> = [(m.autopilot, "AP"), (m.alt_hold, "ALT"), (m.vnav, "VNAV"),
-                                 (m.lnav, "LNAV"), (m.approach, "APP")]
-                .into_iter().filter(|(v, _)| *v).map(|(_, n)| n).collect();
-            g.push(format!("\"modes\":[{}]", on.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(",")));
+            let on: Vec<&str> = [
+                (m.autopilot, "AP"),
+                (m.alt_hold, "ALT"),
+                (m.vnav, "VNAV"),
+                (m.lnav, "LNAV"),
+                (m.approach, "APP"),
+            ]
+            .into_iter()
+            .filter(|(v, _)| *v)
+            .map(|(_, n)| n)
+            .collect();
+            g.push(format!(
+                "\"modes\":[{}]",
+                on.iter()
+                    .map(|n| format!("\"{n}\""))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
         }
         g.push(format!("\"tcas\":{}", t.tcas));
         f.push(format!("\"target\":{{{}}}", g.join(",")));
     }
-    if f.is_empty() { String::new() } else { format!("{{{}}}", f.join(",")) }
+    if f.is_empty() {
+        String::new()
+    } else {
+        format!("{{{}}}", f.join(","))
+    }
 }
 
 /// A number with at most `dp` decimal places, trailing zeros removed. `dp` is
@@ -368,7 +407,9 @@ mod tests {
     use super::*;
     use anrb::tracker::{Category, Tracker};
 
-    fn state() -> State { State::new("beast") }
+    fn state() -> State {
+        State::new("beast")
+    }
 
     /// The message carries the shape the page parses: a sequence number to
     /// poll from, the aircraft it knows, and the points since that number.
@@ -380,17 +421,26 @@ mod tests {
         s.point(0x4009DA, 50.2, 8.6, Some(35_000), t0 + 5.0);
         let first = s.updates(0);
         assert!(first.contains("\"4009DA\""), "{first}");
-        assert_eq!(first.matches("[").count() - first.matches("\"drop\":[").count(), 3,
-                   "two points and their array: {first}");
+        assert_eq!(
+            first.matches("[").count() - first.matches("\"drop\":[").count(),
+            3,
+            "two points and their array: {first}"
+        );
         assert!(first.contains("\"seq\":2"));
         s.counters(7, 1, 2, 3);
         let counted = s.updates(0);
         assert!(counted.contains("\"messages\":7"), "{counted}");
-        assert!(counted.contains("\"checks\":{\"bad_parity\":1,\"implausible\":2,\"resyncs\":3}"), "{counted}");
+        assert!(
+            counted.contains("\"checks\":{\"bad_parity\":1,\"implausible\":2,\"resyncs\":3}"),
+            "{counted}"
+        );
         assert!(counted.contains("\"history\":900"), "{counted}");
 
         let again = s.updates(2);
-        assert!(again.contains("\"new\":[]"), "nothing newer than the last poll: {again}");
+        assert!(
+            again.contains("\"new\":[]"),
+            "nothing newer than the last poll: {again}"
+        );
     }
 
     #[test]
@@ -398,9 +448,12 @@ mod tests {
         let s = state();
         let t0 = now();
         s.point(0x3C6551, 50.0, 8.0, None, t0);
-        s.point(0x3C6551, 50.00001, 8.00001, None, t0 + 0.5);   // same place, moments later
-        assert!(s.updates(0).contains("\"seq\":1"), "the second point says nothing new");
-        s.point(0x3C6551, 50.05, 8.05, None, t0 + 0.6);         // moved
+        s.point(0x3C6551, 50.00001, 8.00001, None, t0 + 0.5); // same place, moments later
+        assert!(
+            s.updates(0).contains("\"seq\":1"),
+            "the second point says nothing new"
+        );
+        s.point(0x3C6551, 50.05, 8.05, None, t0 + 0.6); // moved
         assert!(s.updates(0).contains("\"seq\":2"));
     }
 
@@ -411,14 +464,22 @@ mod tests {
         s.point(0x4009DA, 50.1, 8.5, None, t0 - INACTIVE - 1.0);
         let msg = s.updates(0);
         assert!(msg.contains("\"drop\":[\"4009DA\"]"), "{msg}");
-        assert!(!msg.contains("\"4009DA\":{"), "and it is not in the fleet: {msg}");
+        assert!(
+            !msg.contains("\"4009DA\":{"),
+            "and it is not in the fleet: {msg}"
+        );
 
         s.expire(t0);
-        assert!(s.updates(0).contains("\"drop\":[\"4009DA\"]"),
-                "still held inside the history window, so it can come back");
+        assert!(
+            s.updates(0).contains("\"drop\":[\"4009DA\"]"),
+            "still held inside the history window, so it can come back"
+        );
         s.expire(t0 + HISTORY + 1.0);
         let gone = s.updates(0);
-        assert!(gone.contains("\"ac\":{}") && gone.contains("\"drop\":[]"), "{gone}");
+        assert!(
+            gone.contains("\"ac\":{}") && gone.contains("\"drop\":[]"),
+            "{gone}"
+        );
     }
 
     /// The fields Beast carries and BaseStation does not, as the popup reads
@@ -442,9 +503,25 @@ mod tests {
         // A DF17 identification message for 4009DA, callsign BAW11, emitter
         // category A5, with the parity made good so the tracker accepts it the
         // way it accepts one off the wire.
-        let mut f = vec![0x8D, 0x40, 0x09, 0xDA, (4 << 3) | 5, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let mut f = vec![
+            0x8D,
+            0x40,
+            0x09,
+            0xDA,
+            (4 << 3) | 5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
         let mut packed: u64 = 0;
-        for c in [2u64, 1, 23, 49, 49, 32, 32, 32] {      // B A W 1 1 and three pads
+        for c in [2u64, 1, 23, 49, 49, 32, 32, 32] {
+            // B A W 1 1 and three pads
             packed = (packed << 6) | c;
         }
         for (i, b) in f[5..11].iter_mut().enumerate() {
@@ -460,7 +537,141 @@ mod tests {
         s.fields(a, 0.0, now());
         let msg = s.updates(0);
         assert_eq!(a.callsign.as_deref(), Some("BAW11"), "the callsign decoded");
-        assert!(msg.contains("\"cs\":\"BAW11\""), "and is in the message: {msg}");
-        assert!(msg.contains("\"category\":\"A5\""), "with the category: {msg}");
+        assert!(
+            msg.contains("\"cs\":\"BAW11\""),
+            "and is in the message: {msg}"
+        );
+        assert!(
+            msg.contains("\"category\":\"A5\""),
+            "with the category: {msg}"
+        );
+    }
+
+    /// The head of the message says what the bridge is connected to and what
+    /// it will answer.
+    #[test]
+    fn the_head_says_what_the_bridge_serves() {
+        let mut s = State::new("sbs");
+        let msg = s.updates(0);
+        assert!(msg.contains("\"seq\":0,\"connected\":false,\"source\":\"sbs\",\"logos\":false,\"lookups\":false,"),
+                "{msg}");
+        s.serving_logos();
+        s.serving_lookups();
+        s.set_connected(true);
+        let msg = s.updates(0);
+        assert!(
+            msg.contains("\"connected\":true,\"source\":\"sbs\",\"logos\":true,\"lookups\":true,"),
+            "{msg}"
+        );
+        assert!(msg.ends_with(",\"history\":900,\"inactive\":60}"), "{msg}");
+    }
+
+    /// Every field of an aircraft, with a callsign that needs escaping, and
+    /// an aircraft that has sent nothing but a position.
+    #[test]
+    fn every_field_of_an_aircraft_is_written() {
+        let s = state();
+        let t = now();
+        let mut a = Aircraft::new(0x00ABCD);
+        a.callsign = Some("A\"B\\C\u{1}".to_string());
+        a.alt = Some(35_000);
+        a.speed = Some(451.3);
+        a.heading = Some(90.0);
+        a.vrate = Some(-640);
+        a.squawk = Some(7);
+        a.on_ground = true;
+        s.fields(&a, 0.0, t);
+        s.point(0x4009DA, 50.123456, 8.5, None, t);
+        let msg = s.updates(0);
+        assert!(msg.contains(r#""00ABCD":{"cs":"A\"B\\C\u0001","alt":35000,"gs":451.3,"trk":90,"vr":-640,"sq":"0007","gnd":1,"age":"#),
+                "{msg}");
+        assert!(msg.contains(r#""4009DA":{"cs":null,"alt":null,"gs":null,"trk":null,"vr":null,"sq":null,"gnd":0,"age":"#),
+                "{msg}");
+        assert!(
+            msg.contains(r#""new":[["#) && msg.contains(r#",8.5,50.12346,null]]"#),
+            "{msg}"
+        );
+        assert!(msg.contains("]}},\"drop\":[]"), "{msg}");
+        assert_eq!(msg.matches("\"cs\":").count(), 2, "two aircraft: {msg}");
+    }
+
+    /// Several quiet aircraft are all listed to drop.
+    #[test]
+    fn several_quiet_aircraft_are_all_dropped() {
+        let s = state();
+        let old = now() - INACTIVE - 5.0;
+        s.point(0x000001, 50.0, 8.0, None, old);
+        s.point(0x000002, 51.0, 9.0, None, old);
+        let msg = s.updates(0);
+        assert!(msg.contains("\"ac\":{}"), "{msg}");
+        assert!(
+            msg.contains("\"drop\":[\"000001\",\"000002\"]")
+                || msg.contains("\"drop\":[\"000002\",\"000001\"]"),
+            "{msg}"
+        );
+    }
+
+    /// Every Beast-only field, in the order the popup is given them.
+    #[test]
+    fn every_extra_field_is_written() {
+        use anrb::tracker::{Airspeed, Modes, TargetState};
+        let mut a = Aircraft::new(0x4009DA);
+        a.category = Some(Category { set: 'B', code: 2 });
+        a.emergency = Some(1);
+        a.gnss_alt = Some(35_100);
+        a.geo_minus_baro = Some(-75);
+        a.airspeed = Some(Airspeed {
+            heading: Some(123.4),
+            knots: Some(250),
+            true_airspeed: false,
+        });
+        a.adsb_version = Some(2);
+        a.target = Some(TargetState {
+            altitude: Some(36_000),
+            altitude_fms: false,
+            qnh: Some(1013.2),
+            heading: Some(270.0),
+            modes: Some(Modes {
+                autopilot: true,
+                lnav: true,
+                ..Modes::default()
+            }),
+            tcas: true,
+        });
+        assert_eq!(
+            extra(&a),
+            r#"{"category":"B2","emergency":1,"gnss_alt":35100,"geo_minus_baro":-75,"ias":250,"mag_heading":123.4,"version":2,"target":{"alt":36000,"alt_source":"MCP/FCU","qnh":1013.2,"heading":270.0,"modes":["AP","LNAV"],"tcas":true}}"#
+        );
+
+        // True airspeed with no heading, and a target from the FMS with
+        // nothing else set.
+        let mut a = Aircraft::new(0x4009DA);
+        a.airspeed = Some(Airspeed {
+            heading: None,
+            knots: Some(480),
+            true_airspeed: true,
+        });
+        a.target = Some(TargetState {
+            altitude: Some(24_000),
+            altitude_fms: true,
+            ..TargetState::default()
+        });
+        assert_eq!(
+            extra(&a),
+            r#"{"tas":480,"target":{"alt":24000,"alt_source":"FMS","tcas":false}}"#
+        );
+
+        // An airspeed message with neither field, and modes all off.
+        let mut a = Aircraft::new(0x4009DA);
+        a.airspeed = Some(Airspeed {
+            heading: None,
+            knots: None,
+            true_airspeed: false,
+        });
+        a.target = Some(TargetState {
+            modes: Some(Modes::default()),
+            ..TargetState::default()
+        });
+        assert_eq!(extra(&a), r#"{"target":{"modes":[],"tcas":false}}"#);
     }
 }

@@ -13,6 +13,12 @@ mod gate;
 mod stats;
 mod whitelist;
 
+/// Synthetic bursts for unit tests. The integration tests include the same
+/// file as `mod common`.
+#[cfg(test)]
+#[path = "../../tests/common/mod.rs"]
+pub(crate) mod synth;
+
 pub use frame::Frame;
 pub use stats::{Options, Phases, Stats};
 use whitelist::Whitelist;
@@ -23,7 +29,11 @@ use crate::stages::{packbits, Stages, MAX_BITS};
 
 /// One demodulator configuration in the search grid.
 #[derive(Clone, Copy)]
-struct Cfg { skipbits: usize, gt: i32, bias: bool }
+struct Cfg {
+    skipbits: usize,
+    gt: i32,
+    bias: bool,
+}
 
 /// The Mode-S decoder: one burst of samples in, at most one [`Frame`] out.
 /// Holds the working buffers and the address whitelist, so reuse one decoder
@@ -97,11 +107,15 @@ impl Decoder {
     }
 
     /// Addresses the whitelist holds.
-    pub fn whitelist_len(&self) -> usize { self.wl.count() }
+    pub fn whitelist_len(&self) -> usize {
+        self.wl.count()
+    }
     /// Addresses dropped from the whitelist to make room for newer ones. A
     /// receiver that has been up long enough to fill it keeps learning, and
     /// this says how hard it is having to work at that.
-    pub fn whitelist_evicted(&self) -> u64 { self.wl.evicted }
+    pub fn whitelist_evicted(&self) -> u64 {
+        self.wl.evicted
+    }
 
     /// Most framing offsets a configuration can yield: start positions 0
     /// through 20.
@@ -114,7 +128,9 @@ impl Decoder {
         }
         let cfg = self.grid[c];
         let t0 = tick();
-        let nb = self.stages.run(w, cfg.skipbits, cfg.gt, cfg.bias, &mut self.dec);
+        let nb = self
+            .stages
+            .run(w, cfg.skipbits, cfg.gt, cfg.bias, &mut self.dec);
         let t1 = tick();
         self.stats.stage_runs += 1;
         let off = c * self.cache_stride;
@@ -139,9 +155,13 @@ impl Decoder {
                 let db = &self.cache_bits[off + st..off + n];
                 let df = (db[0] << 4) | (db[1] << 3) | (db[2] << 2) | (db[3] << 1) | db[4];
                 let nbits = if df < 16 { 56usize } else { 112 };
-                if st + nbits > n { continue; }
+                if st + nbits > n {
+                    continue;
+                }
                 let pure = matches!(df, 11 | 17 | 18);
-                if !pure && !matches!(df, 0 | 4 | 5 | 16 | 20 | 21) { continue; }
+                if !pure && !matches!(df, 0 | 4 | 5 | 16 | 20 | 21) {
+                    continue;
+                }
                 self.frame_st[base + k] = st as u8;
                 self.frame_nbytes[base + k] = (nbits / 8) as u8;
                 self.frame_pure[base + k] = pure;
@@ -152,9 +172,24 @@ impl Decoder {
         n
     }
 
-    fn pass(&mut self, w: &[u8], maxbits: u8, overlaid_mode: bool, soft: bool, ms: u32) -> Option<Frame> {
+    fn pass(
+        &mut self,
+        w: &[u8],
+        maxbits: u8,
+        overlaid_mode: bool,
+        soft: bool,
+        ms: u32,
+    ) -> Option<Frame> {
         // 0 = clean, 1 = 1-bit, 2 = soft, 3 = overlaid, 4 = blind 2-bit
-        let pass_id = if overlaid_mode { 3 } else if soft { 2 } else if maxbits >= 2 { 4 } else { maxbits as usize };
+        let pass_id = if overlaid_mode {
+            3
+        } else if soft {
+            2
+        } else if maxbits >= 2 {
+            4
+        } else {
+            maxbits as usize
+        };
         for c in 0..self.grid.len() {
             self.stats.cfgs_by_pass[pass_id] += 1;
             let nb = self.stage_cached(c, w);
@@ -170,7 +205,9 @@ impl Decoder {
                 let pure = self.frame_pure[base + k];
                 // Entries are either pure or address-overlaid, never both, so
                 // one comparison selects what this pass wants.
-                if pure == overlaid_mode { continue; }
+                if pure == overlaid_mode {
+                    continue;
+                }
                 self.stats.offsets_kept += 1;
                 let st = self.frame_st[base + k] as usize;
                 let nbytes = self.frame_nbytes[base + k] as usize;
@@ -205,7 +242,12 @@ impl Decoder {
                         if r <= maxbits && gate::plausible(&tmp[..nbytes]) {
                             self.wl.add(frame::icao(&tmp), ms);
                             self.phases.frame += tick().wrapping_sub(tf0);
-                            return Some(Frame { bytes: tmp, len: nbytes as u8, corrected: r, ms });
+                            return Some(Frame {
+                                bytes: tmp,
+                                len: nbytes as u8,
+                                corrected: r,
+                                ms,
+                            });
                         }
                     }
                 } else {
@@ -219,7 +261,12 @@ impl Decoder {
                     if self.wl.has(icao) {
                         self.stats.overlaid_hit += 1;
                         self.phases.frame += tick().wrapping_sub(tf0);
-                        return Some(Frame { bytes: cand, len: nbytes as u8, corrected: 0, ms });
+                        return Some(Frame {
+                            bytes: cand,
+                            len: nbytes as u8,
+                            corrected: 0,
+                            ms,
+                        });
                     }
                 }
             }
@@ -271,7 +318,13 @@ impl Decoder {
     }
 
     /// Check the fast demodulator against the reference for one configuration.
-    pub fn verify_stages(&mut self, w: &[u8], skipbits: usize, gt: i32, bias: bool) -> Result<(), &'static str> {
+    pub fn verify_stages(
+        &mut self,
+        w: &[u8],
+        skipbits: usize,
+        gt: i32,
+        bias: bool,
+    ) -> Result<(), &'static str> {
         let mut a = vec![0u8; MAX_BITS];
         let mut b = vec![0u8; MAX_BITS];
         let ra = self.stages.run_ref(w, skipbits, gt, bias, &mut a);
@@ -288,14 +341,114 @@ impl Decoder {
 
     /// Cycle counts inside the demodulator.
     #[cfg(feature = "profile")]
-    pub fn stage_phases(&self) -> crate::stages::StagePhases { self.stages.phases }
+    pub fn stage_phases(&self) -> crate::stages::StagePhases {
+        self.stages.phases
+    }
 
     /// Cycle counts inside the soft search.
     #[cfg(feature = "profile")]
-    pub fn soft_phases(&self) -> crate::crc::SoftPhases { self.crc.soft_phases.get() }
+    pub fn soft_phases(&self) -> crate::crc::SoftPhases {
+        self.crc.soft_phases.get()
+    }
 }
 
 impl Default for Decoder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use synth::{burst, df4, hex};
+
+    /// Every setting is in the grid once, skipbits 1 comes first, and equal
+    /// skipbits sit together so the demodulator's memo is reused.
+    #[test]
+    fn grid_covers_every_setting_grouped_by_skipbits() {
+        let dec = Decoder::default();
+        assert_eq!(dec.grid.len(), 36);
+        assert_eq!(
+            (dec.grid[0].skipbits, dec.grid[0].gt, dec.grid[0].bias),
+            (1, 1, true)
+        );
+        let mut seen = std::collections::HashSet::new();
+        for c in &dec.grid {
+            assert!(seen.insert((c.skipbits, c.gt, c.bias)));
+        }
+        for w in dec.grid.chunks(4) {
+            assert!(w.iter().all(|c| c.skipbits == w[0].skipbits));
+        }
+    }
+
+    /// The framings kept for one configuration: the offsets whose format is
+    /// handled and whose frame fits, marked pure or address-overlaid.
+    fn framings(dec: &mut Decoder, w: &[u8], c: usize) -> Vec<(u8, u8, bool)> {
+        dec.decode_burst(w, 0);
+        dec.stage_cached(c, w);
+        let base = c * Decoder::FRAMES_MAX;
+        (0..dec.frame_n[c] as usize)
+            .map(|k| {
+                (
+                    dec.frame_st[base + k],
+                    dec.frame_nbytes[base + k],
+                    dec.frame_pure[base + k],
+                )
+            })
+            .collect()
+    }
+
+    /// The rule written out: offsets 0 to 20 whose first five bits are a
+    /// handled format and whose frame fits in the bits.
+    fn expected(bits: &[u8]) -> Vec<(u8, u8, bool)> {
+        let n = bits.len();
+        (0..=(n - 56).min(20))
+            .filter_map(|st| {
+                let df = bits[st..st + 5].iter().fold(0u8, |a, &b| (a << 1) | b);
+                let nbits = if df < 16 { 56 } else { 112 };
+                let pure = matches!(df, 11 | 17 | 18);
+                let handled = pure || matches!(df, 0 | 4 | 5 | 16 | 20 | 21);
+                (handled && st + nbits <= n).then_some((st as u8, (nbits / 8) as u8, pure))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn framings_are_classified_by_format() {
+        let mut dec = Decoder::new();
+        // Grid entry 5 is skipbits 0 without hysteresis, which reads a clean
+        // burst exactly.
+        assert_eq!((dec.grid[5].skipbits, dec.grid[5].bias), (0, false));
+
+        // In a 112-bit burst only offset 0 can hold a long frame; later
+        // offsets can still hold short ones.
+        let f = hex("8d4009da5833318e2bd82af8c6f5");
+        let bits: Vec<u8> = (0..112).map(|i| u8::from(synth::bit(&f, i))).collect();
+        let got = framings(&mut dec, &burst(&f), 5);
+        assert_eq!(got[0], (0, 14, true));
+        assert!(got[1..].iter().all(|&(st, n, _)| st > 0 && n == 7));
+        assert_eq!(got, expected(&bits));
+
+        // A 56-bit burst has room for one offset. DF4 is address-overlaid.
+        assert_eq!(
+            framings(&mut dec, &burst(&df4(0x4CA2D6)), 5),
+            [(0, 7, false)]
+        );
+
+        // Noise, checked against the demodulator's own bits for every
+        // configuration.
+        let w = synth::noise(5, 112);
+        for c in 0..dec.grid.len() {
+            let got = framings(&mut dec, &w, c);
+            let off = c * dec.cache_stride;
+            let nb = dec.cache_nb[c] as usize;
+            let want = if nb < 56 {
+                vec![]
+            } else {
+                expected(&dec.cache_bits[off..off + nb])
+            };
+            assert_eq!(got, want, "configuration {c}");
+        }
+    }
+}

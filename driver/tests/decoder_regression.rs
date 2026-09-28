@@ -1,6 +1,7 @@
 //! Regression checks of the decoder against captures/bursts.bin, and of the
 //! fast demodulator against the reference one. Each test returns early, and
-//! passes, when its capture file is absent.
+//! passes, when its capture file is absent. The checks in decoder.rs run on
+//! generated bursts and need no capture.
 
 use anrb::corpus::{self, Fingerprint};
 use anrb::Decoder;
@@ -18,19 +19,31 @@ const EXPECTED_FRAMES: usize = 18;
 
 #[test]
 fn fingerprint_is_unchanged() {
-    let Some(d) = bursts_bin() else { eprintln!("corpus absent, skipping"); return };
+    let Some(d) = bursts_bin() else {
+        eprintln!("corpus absent, skipping");
+        return;
+    };
     let mut dec = Decoder::new();
     let mut fp = Fingerprint::new();
     for b in corpus::burst_file(&d) {
-        if let Some(f) = dec.decode_burst(b, 0) { fp.add(&f); }
+        if let Some(f) = dec.decode_burst(b, 0) {
+            fp.add(&f);
+        }
     }
     assert_eq!(fp.frames, EXPECTED_FRAMES, "frame count");
-    assert_eq!(fp.hash, EXPECTED_FINGERPRINT, "fingerprint");
+    assert_eq!(
+        format!("{:016x}", fp.hash),
+        format!("{EXPECTED_FINGERPRINT:016x}"),
+        "fingerprint"
+    );
 }
 
 #[test]
 fn fast_demodulator_matches_reference() {
-    let Some(d) = bursts_bin() else { eprintln!("corpus absent, skipping"); return };
+    let Some(d) = bursts_bin() else {
+        eprintln!("corpus absent, skipping");
+        return;
+    };
     let mut dec = Decoder::new();
     let mut checked = 0usize;
     for b in corpus::burst_file(&d) {

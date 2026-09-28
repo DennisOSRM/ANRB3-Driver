@@ -19,22 +19,38 @@ pub struct SbsServer {
 impl SbsServer {
     /// Listen on `port` on every interface; 0 lets the system choose.
     pub fn bind(port: u16) -> std::io::Result<Self> {
-        Ok(SbsServer { feed: Feed::bind(port)? })
+        Ok(SbsServer {
+            feed: Feed::bind(port)?,
+        })
     }
     /// The port listened on.
-    pub fn port(&self) -> u16 { self.feed.port() }
+    pub fn port(&self) -> u16 {
+        self.feed.port()
+    }
     /// Readers currently attached.
-    pub fn clients(&self) -> usize { self.feed.clients() }
+    pub fn clients(&self) -> usize {
+        self.feed.clients()
+    }
     /// Lines sent while at least one reader was attached.
-    pub fn lines(&self) -> u64 { self.feed.sent() }
+    pub fn lines(&self) -> u64 {
+        self.feed.sent()
+    }
     /// Readers cut off for falling behind.
-    pub fn dropped(&self) -> u64 { self.feed.dropped() }
+    pub fn dropped(&self) -> u64 {
+        self.feed.dropped()
+    }
     /// Accept readers and flush queued bytes; call every time round the loop.
-    pub fn poll(&mut self) { self.feed.poll(); }
+    pub fn poll(&mut self) {
+        self.feed.poll();
+    }
     /// Who is attached.
-    pub fn readers(&self) -> Vec<ReaderInfo> { self.feed.readers() }
+    pub fn readers(&self) -> Vec<ReaderInfo> {
+        self.feed.readers()
+    }
     /// Joins and departures since the last call.
-    pub fn take_events(&mut self) -> Vec<Event> { self.feed.take_events() }
+    pub fn take_events(&mut self) -> Vec<Event> {
+        self.feed.take_events()
+    }
 
     /// Emit the line this update produced, if the format has a place for it.
     pub fn emit(&mut self, a: &Aircraft, what: Update, now: std::time::SystemTime) {
@@ -51,48 +67,92 @@ impl SbsServer {
 /// message for - target state and operational status.
 fn format_line(a: &Aircraft, what: Update, date: &str, time: &str) -> Option<String> {
     let tt = match what {
-        Update::Identification       => 1,
-        Update::SurfacePosition      => 2,
-        Update::AirbornePosition     => 3,
-        Update::Velocity             => 4,
+        Update::Identification => 1,
+        Update::SurfacePosition => 2,
+        Update::AirbornePosition => 3,
+        Update::Velocity => 4,
         Update::SurveillanceAltitude => 5,
         Update::SurveillanceIdentity | Update::Status => 6,
-        Update::Address              => 8,
+        Update::Address => 8,
         Update::TargetState | Update::OperationalStatus => return None,
     };
 
     // Field 11 onwards. Each message carries only what it said, so
     // a reader's history matches the transmissions rather than the tracker.
     let f = |o: Option<String>| o.unwrap_or_default();
-    let callsign = if tt == 1 { f(a.callsign.clone()) } else { String::new() };
-    let alt = if matches!(tt, 3 | 5) { f(a.alt.map(|v| v.to_string())) } else { String::new() };
+    let callsign = if tt == 1 {
+        f(a.callsign.clone())
+    } else {
+        String::new()
+    };
+    let alt = if matches!(tt, 3 | 5) {
+        f(a.alt.map(|v| v.to_string()))
+    } else {
+        String::new()
+    };
     let (gs, trk) = if tt == 4 {
-        (f(a.speed.map(|v| format!("{v:.0}"))), f(a.heading.map(|v| format!("{v:.0}"))))
-    } else { (String::new(), String::new()) };
+        (
+            f(a.speed.map(|v| format!("{v:.0}"))),
+            f(a.heading.map(|v| format!("{v:.0}"))),
+        )
+    } else {
+        (String::new(), String::new())
+    };
     // A position message that did not produce a fix - half a CPR pair, or
     // one still waiting to be confirmed - has no position to report.
     let fixed = a.t_pos == Some(a.t_seen);
     let (lat, lon) = if matches!(tt, 2 | 3) && fixed {
-        (f(a.lat.map(|v| format!("{v:.5}"))), f(a.lon.map(|v| format!("{v:.5}"))))
-    } else { (String::new(), String::new()) };
-    let vr = if tt == 4 { f(a.vrate.map(|v| v.to_string())) } else { String::new() };
-    let gnd = match tt { 2 => "-1", 3 => "0", _ => "" };
-    let squawk = if tt == 6 { f(a.squawk.map(|v| format!("{v:04}"))) } else { String::new() };
+        (
+            f(a.lat.map(|v| format!("{v:.5}"))),
+            f(a.lon.map(|v| format!("{v:.5}"))),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+    let vr = if tt == 4 {
+        f(a.vrate.map(|v| v.to_string()))
+    } else {
+        String::new()
+    };
+    let gnd = match tt {
+        2 => "-1",
+        3 => "0",
+        _ => "",
+    };
+    let squawk = if tt == 6 {
+        f(a.squawk.map(|v| format!("{v:04}")))
+    } else {
+        String::new()
+    };
     // Field 20 is the emergency flag, which only TC28 states.
     let emergency = match (what, a.emergency) {
-        (Update::Status, Some(e)) => if e != 0 { "-1" } else { "0" },
+        (Update::Status, Some(e)) => {
+            if e != 0 {
+                "-1"
+            } else {
+                "0"
+            }
+        }
         _ => "",
     };
 
-    Some(format!("MSG,{tt},1,1,{:06X},1,{date},{time},{date},{time},\
-{callsign},{alt},{gs},{trk},{lat},{lon},{vr},{squawk},,{emergency},,{gnd}", a.icao))
+    Some(format!(
+        "MSG,{tt},1,1,{:06X},1,{date},{time},{date},{time},\
+{callsign},{alt},{gs},{trk},{lat},{lon},{vr},{squawk},,{emergency},,{gnd}",
+        a.icao
+    ))
 }
 
 /// BaseStation timestamps are local wall clock, to the millisecond.
 fn stamp(now: std::time::SystemTime) -> (String, String) {
     let t = crate::clock::local(now);
-    (format!("{:04}/{:02}/{:02}", t.year, t.month, t.day),
-     format!("{:02}:{:02}:{:02}.{:03}", t.hour, t.minute, t.second, t.millis))
+    (
+        format!("{:04}/{:02}/{:02}", t.year, t.month, t.day),
+        format!(
+            "{:02}:{:02}:{:02}.{:03}",
+            t.hour, t.minute, t.second, t.millis
+        ),
+    )
 }
 
 #[cfg(test)]
@@ -108,14 +168,27 @@ mod tests {
 
     #[test]
     fn every_line_has_the_twenty_two_fields_a_reader_expects() {
-        let a = Aircraft { icao: 0x3C6551, callsign: Some("DLH8AB".into()),
-                           alt: Some(35_000), lat: Some(50.1), lon: Some(8.5),
-                           speed: Some(412.0), heading: Some(74.0), vrate: Some(-1408),
-                           ..Default::default() };
-        for w in [Update::Identification, Update::SurfacePosition,
-                  Update::AirbornePosition, Update::Velocity, Update::Address,
-                  Update::SurveillanceAltitude, Update::SurveillanceIdentity,
-                  Update::Status] {
+        let a = Aircraft {
+            icao: 0x3C6551,
+            callsign: Some("DLH8AB".into()),
+            alt: Some(35_000),
+            lat: Some(50.1),
+            lon: Some(8.5),
+            speed: Some(412.0),
+            heading: Some(74.0),
+            vrate: Some(-1408),
+            ..Default::default()
+        };
+        for w in [
+            Update::Identification,
+            Update::SurfacePosition,
+            Update::AirbornePosition,
+            Update::Velocity,
+            Update::Address,
+            Update::SurveillanceAltitude,
+            Update::SurveillanceIdentity,
+            Update::Status,
+        ] {
             let l = line_for(&a, w);
             assert_eq!(l.split(',').count(), 22, "{w:?} produced {l}");
             assert!(l.starts_with("MSG,"));
@@ -126,10 +199,19 @@ mod tests {
     /// has no position in it, and a position message has no ground speed.
     #[test]
     fn fields_follow_the_message_not_the_tracker() {
-        let a = Aircraft { icao: 0x4009DA, callsign: Some("BAW11".into()),
-                           alt: Some(35_000), lat: Some(50.1), lon: Some(8.5),
-                           t_pos: Some(0), speed: Some(412.0), heading: Some(74.0),
-                           vrate: Some(0), squawk: Some(1000), ..Default::default() };
+        let a = Aircraft {
+            icao: 0x4009DA,
+            callsign: Some("BAW11".into()),
+            alt: Some(35_000),
+            lat: Some(50.1),
+            lon: Some(8.5),
+            t_pos: Some(0),
+            speed: Some(412.0),
+            heading: Some(74.0),
+            vrate: Some(0),
+            squawk: Some(1000),
+            ..Default::default()
+        };
         let vel = line_for(&a, Update::Velocity);
         let v: Vec<&str> = vel.split(',').collect();
         assert_eq!(v[14], "", "velocity carries no latitude");
@@ -144,25 +226,224 @@ mod tests {
 
         let all = line_for(&a, Update::Address);
         let c: Vec<&str> = all.split(',').collect();
-        assert!(c[10..21].iter().all(|f| f.is_empty()), "an all-call carries only the address");
+        assert!(
+            c[10..21].iter().all(|f| f.is_empty()),
+            "an all-call carries only the address"
+        );
 
         let id = line_for(&a, Update::SurveillanceIdentity);
         let i: Vec<&str> = id.split(',').collect();
-        assert_eq!((i[1], i[17]), ("6", "1000"), "a squawk reply carries the squawk");
+        assert_eq!(
+            (i[1], i[17]),
+            ("6", "1000"),
+            "a squawk reply carries the squawk"
+        );
         assert_eq!(i[19], "", "but says nothing about an emergency");
     }
 
     /// Half a CPR pair is a position message with no position in it yet.
     #[test]
     fn a_position_message_without_a_fix_has_no_position() {
-        let a = Aircraft { icao: 0x4009DA, lat: Some(50.1), lon: Some(8.5),
-                           t_pos: Some(1_000), t_seen: 1_500, ..Default::default() };
-        let p: Vec<String> = line_for(&a, Update::AirbornePosition).split(',').map(String::from).collect();
-        assert_eq!((p[14].as_str(), p[15].as_str()), ("", ""), "the fix is from an earlier message");
+        let a = Aircraft {
+            icao: 0x4009DA,
+            lat: Some(50.1),
+            lon: Some(8.5),
+            t_pos: Some(1_000),
+            t_seen: 1_500,
+            ..Default::default()
+        };
+        let p: Vec<String> = line_for(&a, Update::AirbornePosition)
+            .split(',')
+            .map(String::from)
+            .collect();
+        assert_eq!(
+            (p[14].as_str(), p[15].as_str()),
+            ("", ""),
+            "the fix is from an earlier message"
+        );
     }
 
     #[test]
     fn target_state_has_no_basestation_message() {
-        assert_eq!(format_line(&Aircraft::default(), Update::TargetState, "D", "T"), None);
+        assert_eq!(
+            format_line(&Aircraft::default(), Update::TargetState, "D", "T"),
+            None
+        );
+        assert_eq!(
+            format_line(&Aircraft::default(), Update::OperationalStatus, "D", "T"),
+            None
+        );
+    }
+
+    fn fields(a: &Aircraft, what: Update) -> Vec<String> {
+        line_for(a, what).split(',').map(String::from).collect()
+    }
+
+    /// The field each message type fills, and the ground flag of the two
+    /// position types.
+    #[test]
+    fn each_message_type_fills_its_own_fields() {
+        let a = Aircraft {
+            icao: 0x4009DA,
+            callsign: Some("BAW11".into()),
+            alt: Some(9075),
+            lat: Some(50.332651),
+            lon: Some(8.737171),
+            t_pos: Some(500),
+            t_seen: 500,
+            speed: Some(159.4),
+            heading: Some(182.6),
+            vrate: Some(-832),
+            squawk: Some(7),
+            ..Default::default()
+        };
+        let id = fields(&a, Update::Identification);
+        assert_eq!(
+            (id[1].as_str(), id[4].as_str(), id[10].as_str()),
+            ("1", "4009DA", "BAW11")
+        );
+        assert_eq!(id[11], "", "identification carries no altitude");
+
+        let s = fields(&a, Update::SurfacePosition);
+        assert_eq!(
+            (s[1].as_str(), s[14].as_str(), s[15].as_str()),
+            ("2", "50.33265", "8.73717")
+        );
+        assert_eq!(
+            (s[11].as_str(), s[21].as_str()),
+            ("", "-1"),
+            "on the ground, with no altitude"
+        );
+
+        let v = fields(&a, Update::Velocity);
+        assert_eq!(
+            (
+                v[1].as_str(),
+                v[12].as_str(),
+                v[13].as_str(),
+                v[16].as_str()
+            ),
+            ("4", "159", "183", "-832")
+        );
+        assert_eq!(v[21], "");
+
+        let alt = fields(&a, Update::SurveillanceAltitude);
+        assert_eq!(
+            (alt[1].as_str(), alt[11].as_str(), alt[17].as_str()),
+            ("5", "9075", "")
+        );
+
+        let sq = fields(&a, Update::SurveillanceIdentity);
+        assert_eq!(sq[17], "0007", "a squawk keeps its leading zeros");
+
+        // Nothing known: the fields are empty rather than zero.
+        let bare = Aircraft::new(0x00000A);
+        let v = fields(&bare, Update::Velocity);
+        assert_eq!(
+            (
+                v[4].as_str(),
+                v[12].as_str(),
+                v[13].as_str(),
+                v[16].as_str()
+            ),
+            ("00000A", "", "", "")
+        );
+        assert_eq!(fields(&bare, Update::Identification)[10], "");
+    }
+
+    /// Field 20 says whether TC28 reported an emergency, and only TC28 fills
+    /// it.
+    #[test]
+    fn the_emergency_flag_comes_from_the_status_message() {
+        let mut a = Aircraft {
+            icao: 0x4009DA,
+            squawk: Some(7700),
+            emergency: Some(1),
+            ..Default::default()
+        };
+        let s = fields(&a, Update::Status);
+        assert_eq!(
+            (s[1].as_str(), s[17].as_str(), s[19].as_str()),
+            ("6", "7700", "-1")
+        );
+        assert_eq!(fields(&a, Update::SurveillanceIdentity)[19], "");
+        a.emergency = Some(0);
+        assert_eq!(fields(&a, Update::Status)[19], "0");
+        a.emergency = None;
+        assert_eq!(fields(&a, Update::Status)[19], "");
+    }
+
+    /// The date and time are local wall clock, to the millisecond.
+    #[test]
+    fn the_stamp_is_local_time() {
+        let now = std::time::UNIX_EPOCH + std::time::Duration::from_millis(1_790_000_000_123);
+        let t = crate::clock::local(now);
+        let (d, tm) = stamp(now);
+        assert_eq!(d, format!("{:04}/{:02}/{:02}", t.year, t.month, t.day));
+        assert_eq!(
+            tm,
+            format!("{:02}:{:02}:{:02}.123", t.hour, t.minute, t.second)
+        );
+        assert_eq!((d.len(), tm.len()), (10, 12));
+    }
+
+    /// Connect a reader and wait until the server has accepted it.
+    fn attach(s: &mut SbsServer, n: usize) -> std::net::TcpStream {
+        let c = std::net::TcpStream::connect(("127.0.0.1", s.port())).unwrap();
+        c.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        for _ in 0..400 {
+            s.poll();
+            if s.clients() == n {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(s.clients(), n, "the reader was accepted");
+        c
+    }
+
+    /// Read until `n` bytes have arrived.
+    fn read_n(c: &mut std::net::TcpStream, n: usize) -> Vec<u8> {
+        use std::io::Read;
+        let mut got = vec![0u8; n];
+        c.read_exact(&mut got).unwrap();
+        got
+    }
+
+    /// Every reader gets every line, with its terminator; an update with no
+    /// BaseStation message sends nothing.
+    #[test]
+    fn the_server_sends_each_line_to_every_reader() {
+        let mut s = SbsServer::bind(0).unwrap();
+        assert_ne!(s.port(), 0);
+        let a = Aircraft {
+            icao: 0x4009DA,
+            callsign: Some("BAW11".into()),
+            ..Default::default()
+        };
+        let now = std::time::SystemTime::now();
+        s.emit(&a, Update::Identification, now);
+        assert_eq!(s.lines(), 0, "no reader, nothing counted");
+
+        let mut readers = [attach(&mut s, 1), attach(&mut s, 2)];
+        assert_eq!(s.readers().len(), 2);
+        let events = s.take_events();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [crate::feed::Event::Joined(_), crate::feed::Event::Joined(_)]
+            ),
+            "{events:?}"
+        );
+
+        s.emit(&a, Update::TargetState, now);
+        s.emit(&a, Update::Identification, now);
+        assert_eq!((s.lines(), s.dropped()), (1, 0));
+        let (d, t) = stamp(now);
+        let want = format!("MSG,1,1,1,4009DA,1,{d},{t},{d},{t},BAW11,,,,,,,,,,,\r\n");
+        for c in &mut readers {
+            assert_eq!(String::from_utf8(read_n(c, want.len())).unwrap(), want);
+        }
     }
 }

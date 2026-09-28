@@ -38,7 +38,9 @@ pub fn hs_answer(q: u32) -> u32 {
 
 /// `UNLOCK` with the eight-digit argument the vendor sends. The device does not
 /// check the value; see `device::unlock_value` for what goes in it.
-pub fn unlock(value: u32) -> String { format!("UNLOCK {value:08X}") }
+pub fn unlock(value: u32) -> String {
+    format!("UNLOCK {value:08X}")
+}
 
 /// Ends the session: the last thing ANRB.exe sends when it shuts down. The box
 /// stops streaming at once and does not reply. (The vendor sends three
@@ -58,7 +60,9 @@ pub const VERSION: &str = "VERSION";
 pub const SIGNAL: &str = "SIGNAL";
 
 /// The reply to a `QUESTION`.
-pub fn answer(question: u32) -> String { format!("ANSWER {:08X}", hs_answer(question)) }
+pub fn answer(question: u32) -> String {
+    format!("ANSWER {:08X}", hs_answer(question))
+}
 
 // ---- replies --------------------------------------------------------------
 
@@ -77,11 +81,18 @@ pub enum Reply<'a> {
 
 pub fn reply(line: &str) -> Reply<'_> {
     let t = line.trim();
-    if let Some(q) = t.strip_prefix("QUESTION ").and_then(|h| u32::from_str_radix(h.trim(), 16).ok()) {
+    if let Some(q) = t
+        .strip_prefix("QUESTION ")
+        .and_then(|h| u32::from_str_radix(h.trim(), 16).ok())
+    {
         return Reply::Question(q);
     }
-    if t.contains("UNLOCKED") { return Reply::Unlocked; }
-    if t == "PONG" { return Reply::Pong; }
+    if t.contains("UNLOCKED") {
+        return Reply::Unlocked;
+    }
+    if t == "PONG" {
+        return Reply::Pong;
+    }
     Reply::Other(t)
 }
 
@@ -94,9 +105,14 @@ pub fn reply(line: &str) -> Reply<'_> {
 pub fn firmware(line: &str) -> Option<&str> {
     const MARK: &str = "Fw:";
     let rest = &line[line.find(MARK)?..];
-    let end = rest.find(|c: char| !(' '..='~').contains(&c)).unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| !(' '..='~').contains(&c))
+        .unwrap_or(rest.len());
     let fw = rest[..end].trim_end();
-    fw[MARK.len()..].chars().any(|c| c.is_ascii_digit()).then_some(fw)
+    fw[MARK.len()..]
+        .chars()
+        .any(|c| c.is_ascii_digit())
+        .then_some(fw)
 }
 
 // ---- bursts ---------------------------------------------------------------
@@ -108,7 +124,14 @@ pub fn firmware(line: &str) -> Option<&str> {
 /// [`MIN_SEGMENT`] bytes cannot hold a frame; if that leaves nothing, the whole
 /// buffer is returned as one segment so it is still counted.
 pub fn segments(buf: &[u8]) -> Segments<'_> {
-    Segments { buf, q: 0, segstart: 0, emitted: false, tail_done: false, fallback_done: false }
+    Segments {
+        buf,
+        q: 0,
+        segstart: 0,
+        emitted: false,
+        tail_done: false,
+        fallback_done: false,
+    }
 }
 
 /// Shortest segment that can hold a frame, in bytes.
@@ -207,7 +230,9 @@ pub fn is_locked_notice(b: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    fn locked(s: &str) -> bool { is_locked_notice(s.as_bytes()) }
+    fn locked(s: &str) -> bool {
+        is_locked_notice(s.as_bytes())
+    }
 
     /// The successful handshake reply contains the failure token; a
     /// substring search would re-authenticate at the moment it succeeded,
@@ -226,7 +251,9 @@ mod tests {
         assert!(locked("LOCKED\r\n"));
         assert!(locked("\r\nLOCKED\r\n"));
         // Bursts are binary, so the notice can be preceded by anything.
-        assert!(is_locked_notice(&[0x8D, 0x00, b'L', b'O', b'C', b'K', b'E', b'D']));
+        assert!(is_locked_notice(&[
+            0x8D, 0x00, b'L', b'O', b'C', b'K', b'E', b'D'
+        ]));
     }
 
     #[test]
@@ -243,12 +270,12 @@ mod tests {
     fn handshake_answers_match_the_device() {
         for (q, a) in [
             (0xAA00_6688u32, 0x021A_928Cu32),
-            (0xE1E9_2C91,    0x2B79_BBD1),
-            (0x01D2_D8D8,    0x5770_8556),      // these three drew UNLOCKED from
-            (0xEAEC_33F6,    0x8A15_5831),      // the device in a live session
-            (0x372E_E9B4,    0xD1BD_0369),
-            (0xCB26_8D8E,    0xCE3A_4FE8),      // and these two with the folded key
-            (0x422D_F8BE,    0xBF1C_4149),
+            (0xE1E9_2C91, 0x2B79_BBD1),
+            (0x01D2_D8D8, 0x5770_8556), // these three drew UNLOCKED from
+            (0xEAEC_33F6, 0x8A15_5831), // the device in a live session
+            (0x372E_E9B4, 0xD1BD_0369),
+            (0xCB26_8D8E, 0xCE3A_4FE8), // and these two with the folded key
+            (0x422D_F8BE, 0xBF1C_4149),
         ] {
             assert_eq!(hs_answer(q), a, "answer for QUESTION {q:08X}");
         }
@@ -327,7 +354,9 @@ mod tests {
     #[test]
     fn a_pong_glued_to_data_is_still_found() {
         assert!(contains_pong(b"PONG"));
-        assert!(contains_pong(&[0x8D, 0x4B, 0x17, b'P', b'O', b'N', b'G', 0x00, 0x0a]));
+        assert!(contains_pong(&[
+            0x8D, 0x4B, 0x17, b'P', b'O', b'N', b'G', 0x00, 0x0a
+        ]));
         assert!(!contains_pong(b"PON"));
         assert!(is_pong(b"PONG\r\n") && !is_pong(&[0x8D, b'P', b'O', b'N', b'G']));
     }

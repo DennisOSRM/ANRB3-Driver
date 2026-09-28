@@ -26,12 +26,18 @@ struct Counting;
 // Cell does not allocate.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        if COUNTING.with(Cell::get) { ALLOCS.fetch_add(1, Relaxed); }
+        if COUNTING.with(Cell::get) {
+            ALLOCS.fetch_add(1, Relaxed);
+        }
         unsafe { System.alloc(l) }
     }
-    unsafe fn dealloc(&self, p: *mut u8, l: Layout) { unsafe { System.dealloc(p, l) } }
+    unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+        unsafe { System.dealloc(p, l) }
+    }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-        if COUNTING.with(Cell::get) { ALLOCS.fetch_add(1, Relaxed); }
+        if COUNTING.with(Cell::get) {
+            ALLOCS.fetch_add(1, Relaxed);
+        }
         unsafe { System.realloc(p, l, n) }
     }
 }
@@ -54,22 +60,38 @@ fn decoding_allocates_only_to_grow() {
         return;
     };
     // Collect the bursts first, so the loop below does nothing but decode.
-    let bursts: Vec<(u32, &[u8])> = corpus::raw_log(&d).expect("an ANRBRAW1 log").take(BURSTS).collect();
+    let bursts: Vec<(u32, &[u8])> = corpus::raw_log(&d)
+        .expect("an ANRBRAW1 log")
+        .take(BURSTS)
+        .collect();
 
     let mut dec = Decoder::new();
     let mut frames = 0usize;
     COUNTING.with(|c| c.set(true));
     for &(ms, data) in &bursts {
-        if protocol::is_pong(data) { continue; }
+        if protocol::is_pong(data) {
+            continue;
+        }
         for (off, len) in protocol::segments(data) {
-            if dec.decode_burst(&data[off..off + len], ms).is_some() { frames += 1; }
+            if dec.decode_burst(&data[off..off + len], ms).is_some() {
+                frames += 1;
+            }
         }
     }
     COUNTING.with(|c| c.set(false));
 
-    assert!(frames > 1000, "expected a real workload, got {frames} frames");
-    assert!(dec.stats.soft_hit > 0, "the soft-decision pass should have run");
+    assert!(
+        frames > 1000,
+        "expected a real workload, got {frames} frames"
+    );
+    assert!(
+        dec.stats.soft_hit > 0,
+        "the soft-decision pass should have run"
+    );
     let n = ALLOCS.load(Relaxed);
-    assert!(n <= GROWTH_BUDGET,
-            "{n} allocations over {} bursts: something is allocating per burst", bursts.len());
+    assert!(
+        n <= GROWTH_BUDGET,
+        "{n} allocations over {} bursts: something is allocating per burst",
+        bursts.len()
+    );
 }

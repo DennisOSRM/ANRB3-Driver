@@ -67,7 +67,15 @@ mod tests {
 
     #[test]
     fn millis_of_day_counts_from_midnight() {
-        let t = LocalTime { year: 2026, month: 9, day: 18, hour: 1, minute: 2, second: 3, millis: 4 };
+        let t = LocalTime {
+            year: 2026,
+            month: 9,
+            day: 18,
+            hour: 1,
+            minute: 2,
+            second: 3,
+            millis: 4,
+        };
         assert_eq!(t.millis_of_day(), 3_723_004);
     }
 

@@ -66,7 +66,9 @@ impl Whitelist {
     /// must probe past rather than stop at - linear probing puts an entry
     /// anywhere after its hash, and stopping early would lose it.
     pub(super) fn add(&mut self, icao: u32, ms: u32) {
-        if !is_valid_icao(icao) { return; }
+        if !is_valid_icao(icao) {
+            return;
+        }
         let h = Self::hash(icao);
         let mut hole = None;
         for i in 0..Self::SIZE {
@@ -77,13 +79,15 @@ impl Whitelist {
                     self.fill(slot, icao, ms);
                     return;
                 }
-                hole.get_or_insert(k);          // a slot something was evicted from
+                hole.get_or_insert(k); // a slot something was evicted from
                 continue;
             }
             if self.key[k] == icao {
                 self.heard[k] = self.heard[k].saturating_add(1);
                 self.seen[k] = ms;
-                if self.heard[k] == Self::MIN_SEEN { self.admit(k); }
+                if self.heard[k] == Self::MIN_SEEN {
+                    self.admit(k);
+                }
                 return;
             }
         }
@@ -103,7 +107,7 @@ impl Whitelist {
         self.key[k] = icao;
         self.heard[k] = 1;
         self.seen[k] = ms;
-        self.ambiguous[k] = false;                    // whatever was here is gone
+        self.ambiguous[k] = false; // whatever was here is gone
         self.n += 1;
     }
 
@@ -115,7 +119,9 @@ impl Whitelist {
     fn evict_oldest(&mut self) {
         let mut oldest = 0usize;
         for k in 0..Self::SIZE {
-            if self.heard[k] > 0 && self.seen[k] < self.seen[oldest] { oldest = k; }
+            if self.heard[k] > 0 && self.seen[k] < self.seen[oldest] {
+                oldest = k;
+            }
         }
         self.heard[oldest] = 0;
         self.ambiguous[oldest] = false;
@@ -131,30 +137,40 @@ impl Whitelist {
     fn admit(&mut self, slot: usize) {
         for i in 0..self.trusted.len() {
             let o = self.trusted[i];
-            if (self.key[slot] ^ self.key[o]).count_ones() >= Self::MIN_SEP { continue; }
+            if (self.key[slot] ^ self.key[o]).count_ones() >= Self::MIN_SEP {
+                continue;
+            }
             for k in [slot, o] {
                 if !self.ambiguous[k] {
                     self.ambiguous[k] = true;
                     #[cfg(test)]
-                    { self.refused += 1; }
+                    {
+                        self.refused += 1;
+                    }
                 }
             }
         }
         self.trusted.push(slot);
     }
     pub(super) fn has(&self, icao: u32) -> bool {
-        if !is_valid_icao(icao) { return false; }
+        if !is_valid_icao(icao) {
+            return false;
+        }
         let h = Self::hash(icao);
         for i in 0..Self::SIZE {
             let k = (h + i) & (Self::SIZE - 1);
-            if self.heard[k] == 0 && self.key[k] == 0 { return false; }
+            if self.heard[k] == 0 && self.key[k] == 0 {
+                return false;
+            }
             if self.heard[k] > 0 && self.key[k] == icao {
                 return !self.ambiguous[k] && self.heard[k] >= Self::MIN_SEEN;
             }
         }
         false
     }
-    pub(super) fn count(&self) -> usize { self.n }
+    pub(super) fn count(&self) -> usize {
+        self.n
+    }
 }
 
 #[cfg(test)]
@@ -168,14 +184,35 @@ mod tests {
     #[test]
     fn close_addresses_refuse_each_other() {
         let mut wl = Whitelist::new();
-        for _ in 0..4 { wl.add(0x3C_6551, 0); }
+        for _ in 0..4 {
+            wl.add(0x3C_6551, 0);
+        }
         assert!(wl.has(0x3C_6551), "a lone trusted address is usable");
-        for _ in 0..4 { wl.add(0x3C_6555, 0); }
-        assert!(!wl.has(0x3C_6551) && !wl.has(0x3C_6555),
-                "two trusted addresses one bit apart are both refused");
+        for _ in 0..4 {
+            wl.add(0x3C_6555, 0);
+        }
+        assert!(
+            !wl.has(0x3C_6551) && !wl.has(0x3C_6555),
+            "two trusted addresses one bit apart are both refused"
+        );
         assert_eq!(wl.refused, 2, "both members of the pair are counted");
-        for _ in 0..4 { wl.add(0x44_00B7, 0); }
+        for _ in 0..4 {
+            wl.add(0x44_00B7, 0);
+        }
         assert!(wl.has(0x44_00B7), "a distant address is unaffected");
+    }
+
+    /// A third address close to one already refused is refused too, and the
+    /// one already refused is counted once.
+    #[test]
+    fn a_refused_address_is_counted_once() {
+        let mut wl = Whitelist::new();
+        for a in [0x3C_6551, 0x3C_6555, 0x3C_6550] {
+            wl.add(a, 0);
+            wl.add(a, 0);
+        }
+        assert_eq!(wl.refused, 3);
+        assert!(!wl.has(0x3C_6551) && !wl.has(0x3C_6555) && !wl.has(0x3C_6550));
     }
 
     /// The separation of 2 still admits a two-bit pair, whose measured
@@ -184,10 +221,16 @@ mod tests {
     fn separation_threshold_is_honoured() {
         let mut wl = Whitelist::new();
         assert_eq!((0x4D_2014u32 ^ 0x4D_2410u32).count_ones(), 2);
-        for _ in 0..4 { wl.add(0x4D_2014, 0); }
-        for _ in 0..4 { wl.add(0x4D_2410, 0); }
-        assert!(wl.has(0x4D_2014) && wl.has(0x4D_2410),
-                "a two-bit pair survives the separation of 2");
+        for _ in 0..4 {
+            wl.add(0x4D_2014, 0);
+        }
+        for _ in 0..4 {
+            wl.add(0x4D_2410, 0);
+        }
+        assert!(
+            wl.has(0x4D_2014) && wl.has(0x4D_2410),
+            "a two-bit pair survives the separation of 2"
+        );
     }
 
     /// Filling the table and then some: the count holds at capacity, the new
@@ -203,17 +246,30 @@ mod tests {
             wl.add(addr(i), i);
             wl.add(addr(i), i);
         }
-        assert_eq!(wl.count(), Whitelist::SIZE, "the table stays full, not overfull");
-        assert!(wl.evicted >= 500, "the oldest made way: {} evicted", wl.evicted);
+        assert_eq!(
+            wl.count(),
+            Whitelist::SIZE,
+            "the table stays full, not overfull"
+        );
+        assert!(
+            wl.evicted >= 500,
+            "the oldest made way: {} evicted",
+            wl.evicted
+        );
 
         let last = Whitelist::SIZE as u32 + 499;
-        assert!(wl.has(addr(last)), "the most recently heard address is trusted");
+        assert!(
+            wl.has(addr(last)),
+            "the most recently heard address is trusted"
+        );
         assert!(!wl.has(addr(0)), "the first one heard is gone");
         // Everything from the last SIZE arrivals that was not evicted must
         // still be findable; a broken probe chain shows up here.
         let mut found = 0;
         for i in (Whitelist::SIZE as u32 + 500 - 2000)..(Whitelist::SIZE as u32 + 500) {
-            if wl.has(addr(i)) { found += 1; }
+            if wl.has(addr(i)) {
+                found += 1;
+            }
         }
         assert_eq!(found, 2000, "every recent address is still reachable");
     }
@@ -231,14 +287,18 @@ mod tests {
             wl.add(old(i), i);
             wl.add(old(i), i);
         }
-        let kept = old(Whitelist::SIZE as u32 - 1);      // heard most recently
+        let kept = old(Whitelist::SIZE as u32 - 1); // heard most recently
         assert!(wl.has(kept), "trusted before any eviction");
-        for i in 0..64u32 {                              // force 64 evictions
+        for i in 0..64u32 {
+            // force 64 evictions
             wl.add(new(i), 1_000_000 + i);
             wl.add(new(i), 1_000_000 + i);
         }
         assert_eq!(wl.evicted, 64, "one slot freed per newcomer");
-        assert!(wl.has(kept), "an address behind a freed slot is still found");
+        assert!(
+            wl.has(kept),
+            "an address behind a freed slot is still found"
+        );
         assert!(wl.has(new(63)), "and so is the newcomer");
         assert_eq!(wl.count(), Whitelist::SIZE);
     }
@@ -258,10 +318,14 @@ mod tests {
     #[test]
     fn unadmitted_neighbour_does_not_poison() {
         let mut wl = Whitelist::new();
-        for _ in 0..4 { wl.add(0x3C_6551, 0); }
-        wl.add(0x3C_6555, 0);              // seen once only
-        assert!(wl.has(0x3C_6551),
-                "a neighbour below MIN_SEEN leaves the trusted address usable");
+        for _ in 0..4 {
+            wl.add(0x3C_6551, 0);
+        }
+        wl.add(0x3C_6555, 0); // seen once only
+        assert!(
+            wl.has(0x3C_6551),
+            "a neighbour below MIN_SEEN leaves the trusted address usable"
+        );
         assert_eq!(wl.refused, 0);
     }
 }

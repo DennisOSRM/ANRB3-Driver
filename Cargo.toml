@@ -4,10 +4,11 @@
 members = ["driver", "bridge"]
 resolver = "2"
 
-# Members take this with `rust-version.workspace = true`. The code uses
-# `iter::repeat_n` and `Option::is_none_or`, both stable since 1.82.
+# Members take this with `rust-version.workspace = true`. The SIMD kernels
+# call intrinsics without `unsafe` inside `#[target_feature]` functions, which
+# is stable since 1.87.
 [workspace.package]
-rust-version = "1.82"
+rust-version = "1.87"
 
 [profile.release]
 opt-level = 3

@@ -39,11 +39,16 @@ impl Backend {
     /// forces the portable code; any other value is reported on stderr and
     /// ignored.
     pub fn detect() -> Backend {
+        Backend::choose(std::env::var("ANRB_BACKEND").ok().as_deref())
+    }
+
+    /// [`Backend::detect`], given what ANRB_BACKEND says, if anything.
+    fn choose(setting: Option<&str>) -> Backend {
         // Allow the fallback to be forced, so the portable path stays
         // exercisable on machines that would otherwise never run it.
-        match std::env::var("ANRB_BACKEND").as_deref() {
-            Ok("scalar") => return Backend::Scalar,
-            Ok(other) if !other.is_empty() => {
+        match setting {
+            Some("scalar") => return Backend::Scalar,
+            Some(other) if !other.is_empty() => {
                 eprintln!("ANRB_BACKEND={other} not recognised; using autodetect");
             }
             _ => {}
@@ -55,7 +60,11 @@ impl Backend {
             }
         }
         // NEON is part of the aarch64 baseline, so no runtime check is needed.
-        if cfg!(target_arch = "aarch64") { Backend::Neon } else { Backend::Scalar }
+        if cfg!(target_arch = "aarch64") {
+            Backend::Neon
+        } else {
+            Backend::Scalar
+        }
     }
 
     /// A name for reports, such as "x86_64 SSSE3".
@@ -118,13 +127,24 @@ pub(crate) fn margin(be: Backend, accb: &[u8], margin: &mut [i8], m: usize, ng: 
     };
     for k in done..m {
         let e = if 2 * k < ng { accb[2 * k] as i32 } else { 0 };
-        let o = if 2 * k + 1 < ng { accb[2 * k + 1] as i32 } else { 0 };
+        let o = if 2 * k + 1 < ng {
+            accb[2 * k + 1] as i32
+        } else {
+            0
+        };
         margin[k] = (e - o) as i8;
     }
 }
 
 /// `out[k] = (accb[2k] > gt) as u8` for `k` in `0..m`, the no-hysteresis path.
-pub(crate) fn threshold_even(be: Backend, accb: &[u8], out: &mut [u8], m: usize, ng: usize, gt: i32) {
+pub(crate) fn threshold_even(
+    be: Backend,
+    accb: &[u8],
+    out: &mut [u8],
+    m: usize,
+    ng: usize,
+    gt: i32,
+) {
     let done = match be {
         #[cfg(target_arch = "x86_64")]
         // SAFETY: Ssse3 is only ever chosen by Backend::detect, after
@@ -158,8 +178,17 @@ pub(crate) fn threshold_even(be: Backend, accb: &[u8], out: &mut [u8], m: usize,
 /// `(g after f)` has `p = p_f ? q_g : p_g` and `q = q_f ? q_g : p_g` - so a
 /// Hillis-Steele scan over 64 steps at once replaces the dependency chain,
 /// which measurement showed to be the real cost rather than the step count.
-pub(crate) fn threshold_hyst(be: Backend, accb: &[u8], out: &mut [u8], m: usize, ng: usize, gt: i32) {
-    if m == 0 { return; }
+pub(crate) fn threshold_hyst(
+    be: Backend,
+    accb: &[u8],
+    out: &mut [u8],
+    m: usize,
+    ng: usize,
+    gt: i32,
+) {
+    if m == 0 {
+        return;
+    }
     out[0] = u8::from(accb[0] as i32 > gt);
     match be {
         #[cfg(target_arch = "x86_64")]
@@ -181,7 +210,10 @@ fn pair_at(accb: &[u8], k: usize, gt: i32) -> (bool, bool) {
     let even = accb[k] as i32;
     let ae = even >= gt;
     let be = even >= gt + 2;
-    (if odd >= gt { be } else { ae }, if odd >= gt + 2 { be } else { ae })
+    (
+        if odd >= gt { be } else { ae },
+        if odd >= gt + 2 { be } else { ae },
+    )
 }
 
 /// Resolve 64 composed steps at once and write them out. Shared by every
@@ -246,16 +278,30 @@ mod x86 {
     /// half and zeroes the high half.
     #[target_feature(enable = "ssse3")]
     fn even_mask() -> __m128i {
-        _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -128, -128, -128, -128, -128, -128, -128, -128)
+        _mm_setr_epi8(
+            0, 2, 4, 6, 8, 10, 12, 14, -128, -128, -128, -128, -128, -128, -128, -128,
+        )
     }
 
     #[target_feature(enable = "ssse3")]
     pub fn nibble_groups(shbuf: &[u8], accb: &mut [u8], g0: usize, ngroups: usize) -> usize {
         let lut = _mm_setr_epi8(
-            NIBPOP[0] as i8, NIBPOP[1] as i8, NIBPOP[2] as i8, NIBPOP[3] as i8,
-            NIBPOP[4] as i8, NIBPOP[5] as i8, NIBPOP[6] as i8, NIBPOP[7] as i8,
-            NIBPOP[8] as i8, NIBPOP[9] as i8, NIBPOP[10] as i8, NIBPOP[11] as i8,
-            NIBPOP[12] as i8, NIBPOP[13] as i8, NIBPOP[14] as i8, NIBPOP[15] as i8,
+            NIBPOP[0] as i8,
+            NIBPOP[1] as i8,
+            NIBPOP[2] as i8,
+            NIBPOP[3] as i8,
+            NIBPOP[4] as i8,
+            NIBPOP[5] as i8,
+            NIBPOP[6] as i8,
+            NIBPOP[7] as i8,
+            NIBPOP[8] as i8,
+            NIBPOP[9] as i8,
+            NIBPOP[10] as i8,
+            NIBPOP[11] as i8,
+            NIBPOP[12] as i8,
+            NIBPOP[13] as i8,
+            NIBPOP[14] as i8,
+            NIBPOP[15] as i8,
         );
         let m0f = _mm_set1_epi8(0x0f);
         let mut gi = 0usize;
@@ -311,14 +357,16 @@ mod x86 {
     #[target_feature(enable = "ssse3")]
     fn hyst_pairs(accb: &[u8], k: usize, gt: i32) -> (u16, u16) {
         let ev = even_mask();
-        let w = &accb[k - 1..k + 32];                     // everything read below
+        let w = &accb[k - 1..k + 32]; // everything read below
         let gather = |base: &[u8]| -> __m128i {
-            _mm_unpacklo_epi64(_mm_shuffle_epi8(load(&base[..16]), ev),
-                               _mm_shuffle_epi8(load(&base[16..32]), ev))
+            _mm_unpacklo_epi64(
+                _mm_shuffle_epi8(load(&base[..16]), ev),
+                _mm_shuffle_epi8(load(&base[16..32]), ev),
+            )
         };
-        let e = gather(&w[1..]);                          // accb[k], k+2, ...
-        let o = gather(&w[..32]);                         // accb[k-1], k+1, ...
-        // Values are 0..4 and gt is 1..2, so a signed byte compare is exact.
+        let e = gather(&w[1..]); // accb[k], k+2, ...
+        let o = gather(&w[..32]); // accb[k-1], k+1, ...
+                                  // Values are 0..4 and gt is 1..2, so a signed byte compare is exact.
         let lo = _mm_set1_epi8((gt - 1) as i8);
         let hi = _mm_set1_epi8((gt + 1) as i8);
         let ae = _mm_cmpgt_epi8(e, lo);
@@ -334,8 +382,9 @@ mod x86 {
     #[target_feature(enable = "ssse3")]
     pub fn margin(accb: &[u8], marg: &mut [i8], m: usize, ng: usize) -> usize {
         let ev = even_mask();
-        let od = _mm_setr_epi8(1, 3, 5, 7, 9, 11, 13, 15,
-                               -128, -128, -128, -128, -128, -128, -128, -128);
+        let od = _mm_setr_epi8(
+            1, 3, 5, 7, 9, 11, 13, 15, -128, -128, -128, -128, -128, -128, -128, -128,
+        );
         let mut k = 0usize;
         while k + 16 <= m.min(marg.len()) && 2 * k + 32 <= ng.min(accb.len()) {
             let a = load(&accb[2 * k..2 * k + 16]);
@@ -359,7 +408,10 @@ mod x86 {
             let a = load(&accb[2 * k..2 * k + 16]);
             let b = load(&accb[2 * k + 16..2 * k + 32]);
             let e = _mm_unpacklo_epi64(_mm_shuffle_epi8(a, ev), _mm_shuffle_epi8(b, ev));
-            store(&mut out[k..k + 16], _mm_and_si128(_mm_cmpgt_epi8(e, gv), one));
+            store(
+                &mut out[k..k + 16],
+                _mm_and_si128(_mm_cmpgt_epi8(e, gv), one),
+            );
             k += 16;
         }
         k
@@ -446,9 +498,9 @@ mod arm {
     /// masks are weighted by bit position and summed per half.
     #[target_feature(enable = "neon")]
     fn hyst_pairs(accb: &[u8], k: usize, gt: i32) -> (u16, u16) {
-        let w = &accb[k - 1..k + 32];                     // everything read below
-        let e = ld2(&w[1..33]).0;                         // accb[k], k+2, ...
-        let o = ld2(&w[..32]).0;                          // accb[k-1], k+1, ...
+        let w = &accb[k - 1..k + 32]; // everything read below
+        let e = ld2(&w[1..33]).0; // accb[k], k+2, ...
+        let o = ld2(&w[..32]).0; // accb[k-1], k+1, ...
         let lo = vdupq_n_s8((gt - 1) as i8);
         let hi = vdupq_n_s8((gt + 1) as i8);
         let es = vreinterpretq_s8_u8(e);
@@ -516,7 +568,14 @@ mod tests {
             x = x.wrapping_mul(1664525).wrapping_add(1013904223);
             *b = (x >> 16) as u8;
         }
-        for &(g0, ng) in &[(0usize, 4096usize), (1, 4096), (1, 137), (0, 33), (1, 32), (0, 1)] {
+        for &(g0, ng) in &[
+            (0usize, 4096usize),
+            (1, 4096),
+            (1, 137),
+            (0, 33),
+            (1, 32),
+            (0, 1),
+        ] {
             let mut a = vec![0u8; 4096];
             let mut b = vec![0u8; 4096];
             nibble_groups(be, &shbuf, &mut a, g0, ng);
@@ -528,7 +587,9 @@ mod tests {
         for (i, v) in accb.iter_mut().enumerate() {
             x = x.wrapping_mul(1664525).wrapping_add(1013904223);
             *v = ((x >> 16) % 5) as u8;
-            if i % 97 == 0 { *v = 4; }
+            if i % 97 == 0 {
+                *v = 4;
+            }
         }
         for &ng in &[4096usize, 200, 33, 32, 3] {
             let m = ng / 2;
@@ -545,7 +606,12 @@ mod tests {
                 let mut b = vec![0u8; 4096];
                 threshold_hyst(be, &accb, &mut a, m, ng, gt);
                 threshold_hyst(Backend::Scalar, &accb, &mut b, m, ng, gt);
-                assert_eq!(a[..m], b[..m], "threshold_hyst gt={gt} ng={ng} on {}", be.name());
+                assert_eq!(
+                    a[..m],
+                    b[..m],
+                    "threshold_hyst gt={gt} ng={ng} on {}",
+                    be.name()
+                );
             }
             for &ng in &[4096usize, 200, 33, 32, 3] {
                 let m = ng / 2;
@@ -556,5 +622,29 @@ mod tests {
                 assert_eq!(a, b, "threshold_even gt={gt} ng={ng} on {}", be.name());
             }
         }
+    }
+
+    /// ANRB_BACKEND=scalar forces the portable code; an empty or unknown
+    /// value is ignored.
+    #[test]
+    fn the_backend_can_be_forced_to_scalar() {
+        let auto = Backend::choose(None);
+        assert_eq!(Backend::choose(Some("scalar")), Backend::Scalar);
+        assert_eq!(Backend::choose(Some("")), auto);
+        assert_eq!(Backend::choose(Some("avx512")), auto, "an unknown value");
+        #[cfg(target_arch = "x86_64")]
+        assert_eq!(
+            auto == Backend::Ssse3,
+            std::arch::is_x86_feature_detected!("ssse3")
+        );
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(auto, Backend::Neon);
+    }
+
+    #[test]
+    fn every_backend_has_a_name() {
+        assert_eq!(Backend::Ssse3.name(), "x86_64 SSSE3");
+        assert_eq!(Backend::Neon.name(), "aarch64 NEON");
+        assert_eq!(Backend::Scalar.name(), "scalar");
     }
 }

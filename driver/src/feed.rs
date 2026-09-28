@@ -58,7 +58,9 @@ impl Reader {
         while !self.queue.is_empty() {
             match self.stream.write(&self.queue) {
                 Ok(0) => return false,
-                Ok(n) => { self.queue.drain(..n); }
+                Ok(n) => {
+                    self.queue.drain(..n);
+                }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => return true,
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(_) => return false,
@@ -83,33 +85,55 @@ impl Feed {
     pub fn bind(port: u16) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("0.0.0.0", port))?;
         listener.set_nonblocking(true)?;
-        let port = listener.local_addr()?.port();       // the real one, if 0 was asked for
-        Ok(Feed { listener, readers: Vec::new(), events: Vec::new(), port, sent: 0, dropped: 0 })
+        let port = listener.local_addr()?.port(); // the real one, if 0 was asked for
+        Ok(Feed {
+            listener,
+            readers: Vec::new(),
+            events: Vec::new(),
+            port,
+            sent: 0,
+            dropped: 0,
+        })
     }
 
     /// The port listened on: the one asked for, or the one the system chose
     /// if 0 was asked for.
-    pub fn port(&self) -> u16 { self.port }
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 
     /// Readers currently attached.
-    pub fn clients(&self) -> usize { self.readers.len() }
+    pub fn clients(&self) -> usize {
+        self.readers.len()
+    }
 
     /// Messages sent while at least one reader was attached.
-    pub fn sent(&self) -> u64 { self.sent }
+    pub fn sent(&self) -> u64 {
+        self.sent
+    }
 
     /// Readers cut off for falling BACKLOG behind. One that hangs up is not
     /// counted: that is a reader leaving, not the feed dropping it.
-    pub fn dropped(&self) -> u64 { self.dropped }
+    pub fn dropped(&self) -> u64 {
+        self.dropped
+    }
 
     /// Who is attached, oldest first.
     pub fn readers(&self) -> Vec<ReaderInfo> {
-        self.readers.iter()
-            .map(|r| ReaderInfo { peer: r.peer, connected: r.since.elapsed(), behind: r.queue.len() })
+        self.readers
+            .iter()
+            .map(|r| ReaderInfo {
+                peer: r.peer,
+                connected: r.since.elapsed(),
+                behind: r.queue.len(),
+            })
             .collect()
     }
 
     /// Joins and departures since the last call.
-    pub fn take_events(&mut self) -> Vec<Event> { std::mem::take(&mut self.events) }
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
 
     /// Take any pending connections and push queued bytes to slow readers.
     /// Cheap; call it every time round the loop.
@@ -117,21 +141,38 @@ impl Feed {
         while let Ok((s, peer)) = self.listener.accept() {
             let _ = s.set_nodelay(true);
             if s.set_nonblocking(true).is_ok() {
-                self.readers.push(Reader { stream: s, queue: Vec::new(), peer, since: Instant::now() });
+                self.readers.push(Reader {
+                    stream: s,
+                    queue: Vec::new(),
+                    peer,
+                    since: Instant::now(),
+                });
                 self.events.push(Event::Joined(peer));
             }
         }
-        self.retain(|r| if r.queue.is_empty() || r.flush() { None } else { Some(LeaveReason::Closed) });
+        self.retain(|r| {
+            if r.queue.is_empty() || r.flush() {
+                None
+            } else {
+                Some(LeaveReason::Closed)
+            }
+        });
     }
 
     /// Send one whole message to every reader.
     pub fn send(&mut self, msg: &[u8]) {
-        if self.readers.is_empty() { return; }
+        if self.readers.is_empty() {
+            return;
+        }
         self.retain(|r| {
             r.queue.extend_from_slice(msg);
-            if !r.flush() { Some(LeaveReason::Closed) }
-            else if r.queue.len() > BACKLOG { Some(LeaveReason::Stalled) }
-            else { None }
+            if !r.flush() {
+                Some(LeaveReason::Closed)
+            } else if r.queue.len() > BACKLOG {
+                Some(LeaveReason::Stalled)
+            } else {
+                None
+            }
         });
         self.sent += 1;
     }
@@ -141,7 +182,9 @@ impl Feed {
         let (events, dropped) = (&mut self.events, &mut self.dropped);
         self.readers.retain_mut(|r| match gone(r) {
             Some(reason) => {
-                if reason == LeaveReason::Stalled { *dropped += 1; }
+                if reason == LeaveReason::Stalled {
+                    *dropped += 1;
+                }
                 events.push(Event::Left(r.peer, reason));
                 false
             }
@@ -155,11 +198,19 @@ mod tests {
     use super::*;
     use std::io::Read;
 
-    fn feed() -> Feed { Feed::bind(0).unwrap() }
+    fn feed() -> Feed {
+        Feed::bind(0).unwrap()
+    }
 
     fn attach(f: &mut Feed) -> TcpStream {
         let c = TcpStream::connect(("127.0.0.1", f.port())).unwrap();
-        for _ in 0..200 { f.poll(); if f.clients() > 0 { break; } std::thread::sleep(Duration::from_millis(5)); }
+        for _ in 0..200 {
+            f.poll();
+            if f.clients() > 0 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
         assert_eq!(f.clients(), 1, "the reader was accepted");
         c
     }
@@ -188,22 +239,44 @@ mod tests {
             send(&mut f, &mut want);
             assert!(want.len() < 64 << 20, "the kernel never pushed back");
         }
-        assert_eq!(f.clients(), 1, "the reader was dropped before the kernel pushed back");
+        assert_eq!(
+            f.clients(),
+            1,
+            "the reader was dropped before the kernel pushed back"
+        );
         // Well short of BACKLOG, so the reader stays attached.
-        for _ in 0..100 { send(&mut f, &mut want); }
-        assert!(!f.readers[0].queue.is_empty() && f.clients() == 1, "queued, still attached");
+        for _ in 0..100 {
+            send(&mut f, &mut want);
+        }
+        assert!(
+            !f.readers[0].queue.is_empty() && f.clients() == 1,
+            "queued, still attached"
+        );
         let info = f.readers();
         assert_eq!(info.len(), 1);
-        assert!(info[0].behind > 0 && info[0].peer.ip().is_loopback(), "{info:?}");
+        assert!(
+            info[0].behind > 0 && info[0].peer.ip().is_loopback(),
+            "{info:?}"
+        );
 
         let mut got = Vec::new();
-        c.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
+        c.set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
         let mut buf = [0u8; 65536];
         while got.len() < want.len() {
             f.poll();
-            match c.read(&mut buf) { Ok(0) => break, Ok(n) => got.extend_from_slice(&buf[..n]), Err(_) => {} }
+            match c.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => got.extend_from_slice(&buf[..n]),
+                Err(_) => {}
+            }
         }
-        assert!(got == want, "received {} of {} bytes, and they must match", got.len(), want.len());
+        assert!(
+            got == want,
+            "received {} of {} bytes, and they must match",
+            got.len(),
+            want.len()
+        );
     }
 
     /// A reader that hangs up is noticed on the next write, and said to have
@@ -215,12 +288,20 @@ mod tests {
         for _ in 0..200 {
             f.send(b"x\r\n");
             f.poll();
-            if f.clients() == 0 { break; }
+            if f.clients() == 0 {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(f.clients(), 0);
         let ev = f.take_events();
-        assert!(matches!(ev.as_slice(), [Event::Joined(_), Event::Left(_, LeaveReason::Closed)]), "{ev:?}");
+        assert!(
+            matches!(
+                ev.as_slice(),
+                [Event::Joined(_), Event::Left(_, LeaveReason::Closed)]
+            ),
+            "{ev:?}"
+        );
         assert_eq!(f.dropped(), 0, "hanging up is leaving, not being dropped");
     }
 
@@ -232,11 +313,23 @@ mod tests {
         let _c = attach(&mut f);
         let m = [b'x'; 1024];
         let mut n = 0;
-        while f.clients() == 1 && n < 100_000 { f.send(&m); n += 1; }
+        while f.clients() == 1 && n < 100_000 {
+            f.send(&m);
+            n += 1;
+        }
         assert_eq!(f.clients(), 0);
         assert_eq!(f.dropped(), 1);
         let ev = f.take_events();
-        assert!(matches!(ev.as_slice(), [Event::Joined(_), Event::Left(_, LeaveReason::Stalled)]), "{ev:?}");
-        assert!(n * m.len() > BACKLOG, "dropped only after passing the backlog");
+        assert!(
+            matches!(
+                ev.as_slice(),
+                [Event::Joined(_), Event::Left(_, LeaveReason::Stalled)]
+            ),
+            "{ev:?}"
+        );
+        assert!(
+            n * m.len() > BACKLOG,
+            "dropped only after passing the backlog"
+        );
     }
 }

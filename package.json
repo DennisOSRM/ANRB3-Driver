@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "description": "Formatting and tests for the map page in bridge/web",
+  "scripts": {
+    "format": "prettier --write bridge/web",
+    "format:check": "prettier --check bridge/web",
+    "test": "node bridge/web/test_tracks.cjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
+  }
+}

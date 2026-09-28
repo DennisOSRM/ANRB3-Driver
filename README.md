@@ -16,7 +16,8 @@ validation and ADS-B decoding all happen here.
 
 ## Building
 
-Rust 1.82 or later, and libusb 1.0 development headers for the driver.
+The minimum supported Rust version (MSRV) is 1.87; CI builds with the latest
+stable release. The driver also needs the libusb 1.0 development headers.
 
     cargo build --release
 
@@ -149,15 +150,29 @@ and a single corrupt message should not move it there.
 
     cargo test --release
 
-The driver's tests cover the decoder, the CRC and its correction paths, CPR,
-the tracker's confirmation rules, the feeds and the terminal dashboard. The
-bridge's cover its HTTP and WebSocket handling, the cache, and the track
-bookkeeping the page depends on. Three integration tests read capture files
-from `captures/`, which is not in this repository: two read `bursts.bin` and
-one reads `tuning_15min_v2.raw`. They pass without checking anything when the
-files are absent.
+The driver's tests run the decoder on synthetic bursts built from real
+frames, and the USB session against a scripted device, so neither needs the
+hardware. They also cover the CRC and its correction paths, CPR, the tracker's
+confirmation rules, the feeds, the terminal dashboard and both programs. The
+bridge's tests cover its HTTP and WebSocket handling, the hexdb cache, the
+feed readers and the track bookkeeping the page depends on. Three further
+tests read capture files from `captures/`, which is not in this repository:
+two read `bursts.bin` and one reads `tuning_15min_v2.raw`. They pass without
+checking anything when the files are absent.
 
     node bridge/web/test_tracks.cjs
 
 checks the drawing rules the page applies - what counts as a gap in a track,
 which altitude colours a leg, when a point leaves the cache.
+
+CI (`.github/workflows/ci.yml`) checks formatting first (rustfmt for the Rust
+code, Prettier for the page's HTML and JavaScript), and only then runs
+clippy and rustdoc with warnings as errors, the tests on the latest stable
+release and on the minimum supported version, the page tests, and a coverage
+check that fails below 90% of lines:
+
+    cargo fmt --all --check
+    npm ci && npm run format:check
+    cargo clippy --workspace --all-targets -- -D warnings
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+    cargo llvm-cov --workspace --fail-under-lines 90

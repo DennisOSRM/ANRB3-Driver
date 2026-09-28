@@ -38,7 +38,6 @@ pub struct Stats {
     pub overlaid_hit: u64,
     // Diagnostic counters, enabled in every build: anrb-replay reports them,
     // and they are plain increments with no measurable cost.
-
     /// Demodulator runs: grid configurations evaluated.
     pub stage_runs: u64,
     /// Candidate framings whose CRC was computed.
@@ -58,7 +57,11 @@ pub struct Stats {
 impl Stats {
     /// Frames recovered per burst, as a percentage.
     pub fn yield_pct(&self) -> f64 {
-        if self.bursts > 0 { 100.0 * self.frames as f64 / self.bursts as f64 } else { 0.0 }
+        if self.bursts > 0 {
+            100.0 * self.frames as f64 / self.bursts as f64
+        } else {
+            0.0
+        }
     }
 }
 
@@ -76,5 +79,11 @@ pub struct Options {
 }
 
 impl Default for Options {
-    fn default() -> Self { Options { soft: true, blind2: false, overlaid: false } }
+    fn default() -> Self {
+        Options {
+            soft: true,
+            blind2: false,
+            overlaid: false,
+        }
+    }
 }

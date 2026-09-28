@@ -41,11 +41,13 @@ pub fn encode(frame: &[u8], out: &mut Vec<u8>) -> bool {
         _ => return false,
     };
     out.extend_from_slice(&[ESC, kind]);
-    out.extend_from_slice(&[0; 6]);                     // timestamp: none
-    out.push(0);                                        // signal level: none
+    out.extend_from_slice(&[0; 6]); // timestamp: none
+    out.push(0); // signal level: none
     for &b in frame {
         out.push(b);
-        if b == ESC { out.push(ESC); }
+        if b == ESC {
+            out.push(ESC);
+        }
     }
     true
 }
@@ -59,22 +61,39 @@ pub struct BeastServer {
 impl BeastServer {
     /// Listen on `port` on every interface; 0 lets the system choose.
     pub fn bind(port: u16) -> std::io::Result<Self> {
-        Ok(BeastServer { feed: Feed::bind(port)?, buf: Vec::with_capacity(64) })
+        Ok(BeastServer {
+            feed: Feed::bind(port)?,
+            buf: Vec::with_capacity(64),
+        })
     }
     /// The port listened on.
-    pub fn port(&self) -> u16 { self.feed.port() }
+    pub fn port(&self) -> u16 {
+        self.feed.port()
+    }
     /// Readers currently attached.
-    pub fn clients(&self) -> usize { self.feed.clients() }
+    pub fn clients(&self) -> usize {
+        self.feed.clients()
+    }
     /// Frames sent while at least one reader was attached.
-    pub fn frames(&self) -> u64 { self.feed.sent() }
+    pub fn frames(&self) -> u64 {
+        self.feed.sent()
+    }
     /// Readers cut off for falling behind.
-    pub fn dropped(&self) -> u64 { self.feed.dropped() }
+    pub fn dropped(&self) -> u64 {
+        self.feed.dropped()
+    }
     /// Accept readers and flush queued bytes; call every time round the loop.
-    pub fn poll(&mut self) { self.feed.poll(); }
+    pub fn poll(&mut self) {
+        self.feed.poll();
+    }
     /// Who is attached.
-    pub fn readers(&self) -> Vec<ReaderInfo> { self.feed.readers() }
+    pub fn readers(&self) -> Vec<ReaderInfo> {
+        self.feed.readers()
+    }
     /// Joins and departures since the last call.
-    pub fn take_events(&mut self) -> Vec<Event> { self.feed.take_events() }
+    pub fn take_events(&mut self) -> Vec<Event> {
+        self.feed.take_events()
+    }
 
     /// Every decoded frame, as it decodes.
     pub fn emit(&mut self, f: &Frame) {
@@ -98,7 +117,9 @@ pub struct Message {
 
 impl Message {
     /// The Mode-S frame, 7 or 14 bytes.
-    pub fn frame(&self) -> &[u8] { &self.bytes[..self.len as usize] }
+    pub fn frame(&self) -> &[u8] {
+        &self.bytes[..self.len as usize]
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -132,7 +153,9 @@ pub struct Reader {
 
 impl Reader {
     /// A reader hunting for the start of the first message.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Consume `data`, handing every complete Mode-S message to `each`.
     /// Mode A/C ('1') and status messages are read past and not reported.
@@ -171,16 +194,36 @@ impl Reader {
 
     /// The type byte: how much follows, or back to hunting if it is not one.
     fn start(&mut self, kind: u8) {
-        let payload = match kind { b'1' => MODE_AC, b'2' => SHORT, b'3' | b'4' => LONG, _ => 0 };
+        let payload = match kind {
+            b'1' => MODE_AC,
+            b'2' => SHORT,
+            b'3' | b'4' => LONG,
+            _ => 0,
+        };
         self.got = 0;
         self.kind = kind;
-        self.state = if payload == 0 { State::Hunt } else { State::Body(HEADER + payload) };
+        self.state = if payload == 0 {
+            State::Hunt
+        } else {
+            State::Body(HEADER + payload)
+        };
     }
 
     fn finish(&self, each: &mut impl FnMut(&Message)) {
-        let n = match self.kind { b'2' => SHORT, b'3' => LONG, _ => return };
-        let mut m = Message { timestamp: 0, signal: self.body[HEADER - 1], bytes: [0; LONG], len: n as u8 };
-        for &t in &self.body[..HEADER - 1] { m.timestamp = m.timestamp << 8 | t as u64; }
+        let n = match self.kind {
+            b'2' => SHORT,
+            b'3' => LONG,
+            _ => return,
+        };
+        let mut m = Message {
+            timestamp: 0,
+            signal: self.body[HEADER - 1],
+            bytes: [0; LONG],
+            len: n as u8,
+        };
+        for &t in &self.body[..HEADER - 1] {
+            m.timestamp = m.timestamp << 8 | t as u64;
+        }
         m.bytes[..n].copy_from_slice(&self.body[HEADER..HEADER + n]);
         each(&m);
     }
@@ -195,11 +238,20 @@ mod tests {
     fn decode(mut s: &[u8]) -> Vec<(u8, Vec<u8>)> {
         let mut out = Vec::new();
         while let [ESC, kind, rest @ ..] = s {
-            let n = match kind { b'2' => 7, b'3' => 14, _ => panic!("type {kind}") } + 7;
+            let n = match kind {
+                b'2' => 7,
+                b'3' => 14,
+                _ => panic!("type {kind}"),
+            } + 7;
             let (mut body, mut i) = (Vec::new(), 0);
             while body.len() < n {
                 body.push(rest[i]);
-                i += if rest[i] == ESC { assert_eq!(rest[i + 1], ESC, "a lone 0x1a in a payload"); 2 } else { 1 };
+                i += if rest[i] == ESC {
+                    assert_eq!(rest[i + 1], ESC, "a lone 0x1a in a payload");
+                    2
+                } else {
+                    1
+                };
             }
             out.push((*kind, body));
             s = &rest[i..];
@@ -211,11 +263,17 @@ mod tests {
     #[test]
     fn short_and_long_frames_get_their_types() {
         let df11 = [0x5d, 0x3c, 0x65, 0x51, 0x12, 0x34, 0x56];
-        let df17 = [0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5];
+        let df17 = [
+            0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5,
+        ];
         let mut out = Vec::new();
         assert!(encode(&df11, &mut out));
         assert!(encode(&df17, &mut out));
-        assert_eq!(&out[..9], &[ESC, b'2', 0, 0, 0, 0, 0, 0, 0], "header: type, no timestamp, no signal");
+        assert_eq!(
+            &out[..9],
+            &[ESC, b'2', 0, 0, 0, 0, 0, 0, 0],
+            "header: type, no timestamp, no signal"
+        );
         let got = decode(&out);
         assert_eq!(got[0], (b'2', [&[0u8; 7][..], &df11].concat()));
         assert_eq!(got[1], (b'3', [&[0u8; 7][..], &df17].concat()));
@@ -232,7 +290,9 @@ mod tests {
 
     fn read_all(r: &mut Reader, chunks: &[&[u8]]) -> Vec<Vec<u8>> {
         let mut got = Vec::new();
-        for c in chunks { r.feed(c, |m| got.push(m.frame().to_vec())); }
+        for c in chunks {
+            r.feed(c, |m| got.push(m.frame().to_vec()));
+        }
         got
     }
 
@@ -242,11 +302,15 @@ mod tests {
     fn the_reader_undoes_encode_across_any_split() {
         let frames: [&[u8]; 3] = [
             &[0x5d, ESC, 0x65, ESC, ESC, 0x34, 0x56],
-            &[0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5],
+            &[
+                0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5,
+            ],
             &[ESC; 7],
         ];
         let mut wire = Vec::new();
-        for f in frames { encode(f, &mut wire); }
+        for f in frames {
+            encode(f, &mut wire);
+        }
         for cut in 1..wire.len() {
             let mut r = Reader::new();
             let got = read_all(&mut r, &[&wire[..cut], &wire[cut..]]);
@@ -265,9 +329,9 @@ mod tests {
         let f = [0x5d, 0x3c, 0x65, 0x51, 0x12, 0x34, 0x56];
         let mut one = Vec::new();
         encode(&f, &mut one);
-        let mut wire = one[5..].to_vec();           // the tail of a message
-        wire.extend_from_slice(&one[..12]);          // then one cut short
-        wire.extend_from_slice(&one);                // then a whole one
+        let mut wire = one[5..].to_vec(); // the tail of a message
+        wire.extend_from_slice(&one[..12]); // then one cut short
+        wire.extend_from_slice(&one); // then a whole one
         let mut r = Reader::new();
         assert_eq!(read_all(&mut r, &[&wire]), vec![f.to_vec()]);
         assert_eq!(r.resyncs, 1);
@@ -290,5 +354,77 @@ mod tests {
         let mut out = Vec::new();
         assert!(!encode(&[0; 11], &mut out));
         assert!(out.is_empty());
+    }
+
+    /// Type '4' is a long frame of another kind, and a type byte that is not
+    /// one sends the reader back to hunting; neither is reported.
+    #[test]
+    fn other_message_types_are_read_past() {
+        let long = [
+            0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5,
+        ];
+        let mut wire = vec![ESC, b'4'];
+        wire.extend_from_slice(&[0; HEADER]);
+        wire.extend_from_slice(&long);
+        wire.extend_from_slice(&[ESC, b'9', 1, 2, 3]);
+        encode(&long, &mut wire);
+        let mut r = Reader::new();
+        assert_eq!(
+            read_all(&mut r, &[&wire]),
+            vec![long.to_vec()],
+            "only the '3' frame"
+        );
+        assert_eq!(r.resyncs, 0);
+    }
+
+    /// Connect a reader and wait until the server has accepted it.
+    fn attach(s: &mut BeastServer, n: usize) -> std::net::TcpStream {
+        let c = std::net::TcpStream::connect(("127.0.0.1", s.port())).unwrap();
+        c.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        for _ in 0..400 {
+            s.poll();
+            if s.clients() == n {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(s.clients(), n, "the reader was accepted");
+        c
+    }
+
+    /// Every reader gets every frame, in Beast form.
+    #[test]
+    fn the_server_sends_each_frame_to_every_reader() {
+        use std::io::Read;
+        let short = [0x5d, 0x3c, 0x65, 0x51, 0x12, 0x34, ESC];
+        let long = [
+            0x8d, 0x40, 0x09, 0xda, 0x58, 0x33, 0x31, 0x8e, 0x2b, 0xd8, 0x2a, 0xf8, 0xc6, 0xf5,
+        ];
+        let mut s = BeastServer::bind(0).unwrap();
+        assert_ne!(s.port(), 0);
+        s.emit(&Frame::new(&short, 0).unwrap());
+        assert_eq!(s.frames(), 0, "no reader, nothing counted");
+
+        let mut readers = [attach(&mut s, 1), attach(&mut s, 2)];
+        assert_eq!(s.readers().len(), 2);
+        assert_eq!(s.take_events().len(), 2, "two joined");
+
+        s.emit(&Frame::new(&short, 1).unwrap());
+        s.emit(&Frame::new(&long, 2).unwrap());
+        assert_eq!((s.frames(), s.dropped()), (2, 0));
+        let mut want = Vec::new();
+        encode(&short, &mut want);
+        encode(&long, &mut want);
+        for c in &mut readers {
+            let mut got = vec![0u8; want.len()];
+            c.read_exact(&mut got).unwrap();
+            assert_eq!(got, want);
+            let mut r = Reader::new();
+            assert_eq!(
+                read_all(&mut r, &[&got]),
+                vec![short.to_vec(), long.to_vec()]
+            );
+        }
     }
 }

@@ -7,9 +7,9 @@
 (function (root) {
   'use strict';
 
-  var GAP_MS = 60 * 1000;          // silence longer than this is drawn dashed
+  var GAP_MS = 60 * 1000; // silence longer than this is drawn dashed
   var HISTORY_MS = 15 * 60 * 1000; // default age at which a point is forgotten
-  var FADE_MS = 5 * 1000;          // a quiet aircraft fades over its last five seconds
+  var FADE_MS = 5 * 1000; // a quiet aircraft fades over its last five seconds
 
   /* A point is [tSeconds, lon, lat, altFt|null]. */
 
@@ -17,9 +17,14 @@
    *  held are dropped, so a duplicate or replayed update cannot add a backward
    *  jump. Returns how many were added. */
   function append(pts, fresh) {
-    var last = pts.length ? pts[pts.length - 1][0] : -Infinity, n = 0;
+    var last = pts.length ? pts[pts.length - 1][0] : -Infinity,
+      n = 0;
     for (var i = 0; i < fresh.length; i++) {
-      if (fresh[i][0] > last) { pts.push(fresh[i]); last = fresh[i][0]; n++; }
+      if (fresh[i][0] > last) {
+        pts.push(fresh[i]);
+        last = fresh[i][0];
+        n++;
+      }
     }
     return n;
   }
@@ -28,7 +33,9 @@
   function trim(pts, nowSec, historyMs) {
     var cut = nowSec - (historyMs === undefined ? HISTORY_MS : historyMs) / 1000;
     if (!pts.length || pts[0][0] >= cut) return pts;
-    return pts.filter(function (p) { return p[0] >= cut; });
+    return pts.filter(function (p) {
+      return p[0] >= cut;
+    });
   }
 
   /** True when the aircraft was unheard across this leg for long enough that
@@ -70,12 +77,15 @@
           gap: isGap(pts[i], pts[i + 1], opts.gapMs),
           sel: opts.selected === icao,
           dim: opts.selected != null && opts.selected !== icao,
-          fade: opts.fade === undefined ? 1 : opts.fade
+          fade: opts.fade === undefined ? 1 : opts.fade,
         },
         geometry: {
           type: 'LineString',
-          coordinates: [[pts[i][1], pts[i][2]], [pts[i + 1][1], pts[i + 1][2]]]
-        }
+          coordinates: [
+            [pts[i][1], pts[i][2]],
+            [pts[i + 1][1], pts[i + 1][2]],
+          ],
+        },
       });
     }
     return out;
@@ -87,9 +97,14 @@
     var last = pts[pts.length - 1];
     return {
       type: 'Feature',
-      properties: { icao: icao, cs: meta.cs, trk: meta.trk, alt: meta.alt,
-                    fade: f === undefined ? 1 : f },
-      geometry: { type: 'Point', coordinates: [last[1], last[2]] }
+      properties: {
+        icao: icao,
+        cs: meta.cs,
+        trk: meta.trk,
+        alt: meta.alt,
+        fade: f === undefined ? 1 : f,
+      },
+      geometry: { type: 'Point', coordinates: [last[1], last[2]] },
     };
   }
 
@@ -102,25 +117,39 @@
    */
   function build(fleet, selected, opts) {
     opts = opts || {};
-    var tf = [], pf = [], nTracks = 0, nPts = 0, fading = false;
+    var tf = [],
+      pf = [],
+      nTracks = 0,
+      nPts = 0,
+      fading = false;
     var timed = opts.now !== undefined && opts.inactive !== undefined;
     fleet.forEach(function (a, icao) {
       nPts += a.pts.length;
       if (a.pts.length > 1) nTracks++;
-      var f = timed && a.lastSeen !== undefined
-        ? fade(opts.now - a.lastSeen, opts.inactive, opts.fadeMs) : 1;
+      var f =
+        timed && a.lastSeen !== undefined
+          ? fade(opts.now - a.lastSeen, opts.inactive, opts.fadeMs)
+          : 1;
       if (f < 1) fading = true;
-      tf.push.apply(tf, segments(icao, a.pts,
-        { selected: selected, gapMs: opts.gapMs, fade: f }));
+      tf.push.apply(tf, segments(icao, a.pts, { selected: selected, gapMs: opts.gapMs, fade: f }));
       var h = head(icao, a.pts, a.meta, f);
       if (h) pf.push(h);
     });
     return { tracks: tf, planes: pf, nTracks: nTracks, nPts: nPts, fading: fading };
   }
 
-  var api = { GAP_MS: GAP_MS, HISTORY_MS: HISTORY_MS, FADE_MS: FADE_MS,
-              append: append, trim: trim, isGap: isGap, fade: fade, segments: segments, head: head,
-              build: build };
+  var api = {
+    GAP_MS: GAP_MS,
+    HISTORY_MS: HISTORY_MS,
+    FADE_MS: FADE_MS,
+    append: append,
+    trim: trim,
+    isGap: isGap,
+    fade: fade,
+    segments: segments,
+    head: head,
+    build: build,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.Tracks = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

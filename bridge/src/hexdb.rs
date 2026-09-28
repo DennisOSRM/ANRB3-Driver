@@ -149,6 +149,11 @@ struct Flight {
 }
 
 pub struct Hexdb {
+    /// Where lookups go: [`HOST`] on port 443, or a local server in the tests.
+    /// The photograph is fetched from the host its URL names, on the same
+    /// port.
+    host: String,
+    port: u16,
     dir: PathBuf,
     images: PathBuf,
     ttl: Duration,
@@ -208,6 +213,8 @@ impl Hexdb {
             .with_no_client_auth();
 
         Ok(Hexdb {
+            host: HOST.to_string(),
+            port: 443,
             dir: dir.to_path_buf(),
             images,
             ttl,
@@ -265,7 +272,7 @@ impl Hexdb {
             }
         };
 
-        let url = match self.get(HOST, &format!("/hex-image-thumb?hex={key}")) {
+        let url = match self.get(&self.host, &format!("/hex-image-thumb?hex={key}")) {
             Ok((200, body)) => String::from_utf8_lossy(&body).trim().to_string(),
             Ok((404, _)) => {
                 self.count(|s| s.fetched += 1);
@@ -326,7 +333,9 @@ impl Hexdb {
         // A key with anything but letters and digits in it is refused rather
         // than escaped: hexdb has no such key, and it has no business in a URL
         // path or in a store line either.
-        let Some(key) = normalise(kind, key) else { return Lookup::Missing };
+        let Some(key) = normalise(kind, key) else {
+            return Lookup::Missing;
+        };
         let ck = cache_key(kind, &key);
 
         if let Some(e) = self.fresh(&ck) {
@@ -341,7 +350,7 @@ impl Hexdb {
             }
         };
 
-        match self.get(HOST, &format!("{prefix}{key}")) {
+        match self.get(&self.host, &format!("{prefix}{key}")) {
             Ok((200, body)) => match String::from_utf8(body) {
                 Ok(text) => {
                     self.count(|s| s.fetched += 1);
@@ -365,7 +374,13 @@ impl Hexdb {
     /// one, rather than nothing at all. `transport` is true for a network
     /// failure and false for an unexpected status.
     fn stale(&self, ck: &str, transport: bool) -> Lookup {
-        self.count(|s| if transport { s.failed += 1 } else { s.refused += 1 });
+        self.count(|s| {
+            if transport {
+                s.failed += 1
+            } else {
+                s.refused += 1
+            }
+        });
         match self.cached(ck) {
             Some(e) => {
                 self.count(|s| s.hits += 1);
@@ -377,7 +392,13 @@ impl Hexdb {
 
     /// [`Hexdb::stale`], for the photograph.
     fn stale_image(&self, ck: &str, transport: bool) -> Option<Vec<u8>> {
-        self.count(|s| if transport { s.failed += 1 } else { s.refused += 1 });
+        self.count(|s| {
+            if transport {
+                s.failed += 1
+            } else {
+                s.refused += 1
+            }
+        });
         let e = self.cached(ck)?;
         self.count(|s| s.hits += 1);
         self.image_of(&e)
@@ -405,7 +426,10 @@ impl Hexdb {
     fn fresh(&self, ck: &str) -> Option<Entry> {
         let now = now_secs();
         let s = lock(&self.store);
-        s.entries.get(ck).filter(|e| !e.stale(now, self.ttl)).cloned()
+        s.entries
+            .get(ck)
+            .filter(|e| !e.stale(now, self.ttl))
+            .cloned()
     }
 
     /// File an answer, in memory and at the end of the log.
@@ -415,7 +439,10 @@ impl Hexdb {
     /// kernel has already buffered. It is not flushed: losing the last line to
     /// a power cut costs one lookup.
     fn record(&self, ck: &str, body: Option<String>) {
-        let entry = Entry { fetched: now_secs(), body };
+        let entry = Entry {
+            fetched: now_secs(),
+            body,
+        };
         let line = format_line(ck, &entry);
         let mut s = lock(&self.store);
         s.entries.insert(ck.to_string(), entry);
@@ -477,8 +504,17 @@ impl Hexdb {
             }
             return None;
         }
-        map.insert(ck.to_string(), Arc::new(Flight { done: Mutex::new(false), wake: Condvar::new() }));
-        Some(Claim { db: self, key: ck.to_string() })
+        map.insert(
+            ck.to_string(),
+            Arc::new(Flight {
+                done: Mutex::new(false),
+                wake: Condvar::new(),
+            }),
+        );
+        Some(Claim {
+            db: self,
+            key: ck.to_string(),
+        })
     }
 
     // ---- the request -------------------------------------------------------
@@ -486,13 +522,13 @@ impl Hexdb {
     /// One HTTPS GET, connection and all. Redirects are not followed; a 3xx
     /// counts as refused.
     fn get(&self, host: &str, path: &str) -> io::Result<(u16, Vec<u8>)> {
-        let sock = connect(host)?;
+        let sock = connect(host, self.port)?;
         sock.set_read_timeout(Some(TIMEOUT))?;
         sock.set_write_timeout(Some(TIMEOUT))?;
         let name = rustls::pki_types::ServerName::try_from(host.to_string())
             .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
-        let conn = rustls::ClientConnection::new(Arc::clone(&self.tls), name)
-            .map_err(io::Error::other)?;
+        let conn =
+            rustls::ClientConnection::new(Arc::clone(&self.tls), name).map_err(io::Error::other)?;
         let mut tls = rustls::StreamOwned::new(conn, sock);
 
         // Connection: close because each lookup is one request minutes apart,
@@ -508,6 +544,15 @@ impl Hexdb {
     }
 
     // ---- for the tests -----------------------------------------------------
+
+    /// Send every request to 127.0.0.1 on `port`, trusting what `tls` trusts.
+    #[cfg(test)]
+    fn pointed_at(mut self, port: u16, tls: rustls::ClientConfig) -> Hexdb {
+        self.host = "127.0.0.1".to_string();
+        self.port = port;
+        self.tls = Arc::new(tls);
+        self
+    }
 
     #[cfg(test)]
     fn peek(&self, kind: Kind, key: &str) -> Option<Entry> {
@@ -591,7 +636,9 @@ fn parse_line(line: &str) -> Option<(String, Entry)> {
 fn read_log(path: &Path) -> (HashMap<String, Entry>, u64) {
     let mut entries = HashMap::new();
     let mut lines = 0;
-    let Ok(text) = fs::read_to_string(path) else { return (entries, lines) };
+    let Ok(text) = fs::read_to_string(path) else {
+        return (entries, lines);
+    };
     for line in text.lines() {
         lines += 1;
         if let Some((k, e)) = parse_line(line) {
@@ -661,9 +708,9 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
 /// The first address the name resolves to that will take a connection.
 /// Resolution has no timeout of its own in the standard library; the connect
 /// that follows it does.
-fn connect(host: &str) -> io::Result<TcpStream> {
+fn connect(host: &str, port: u16) -> io::Result<TcpStream> {
     let mut last = None;
-    for addr in (host, 443u16).to_socket_addrs()? {
+    for addr in (host, port).to_socket_addrs()? {
         match TcpStream::connect_timeout(&addr, TIMEOUT) {
             Ok(s) => {
                 let _ = s.set_nodelay(true);
@@ -672,7 +719,8 @@ fn connect(host: &str) -> io::Result<TcpStream> {
             Err(e) => last = Some(e),
         }
     }
-    Err(last.unwrap_or_else(|| io::Error::new(ErrorKind::NotFound, "that name resolved to nothing")))
+    Err(last
+        .unwrap_or_else(|| io::Error::new(ErrorKind::NotFound, "that name resolved to nothing")))
 }
 
 /// How a response says where its body ends.
@@ -692,7 +740,9 @@ fn parse_head(head: &str) -> Option<(u16, Framing)> {
     let status: u16 = lines.next()?.split(' ').nth(1)?.parse().ok()?;
     let mut framing = Framing::Eof;
     for line in lines {
-        let Some((name, value)) = line.split_once(':') else { continue };
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
         let name = name.trim().to_ascii_lowercase();
         let value = value.trim();
         // Chunked wins where both are given, as RFC 9112 says it must:
@@ -716,7 +766,11 @@ struct Chunked {
 
 impl Chunked {
     fn new() -> Chunked {
-        Chunked { raw: Vec::new(), out: Vec::new(), done: false }
+        Chunked {
+            raw: Vec::new(),
+            out: Vec::new(),
+            done: false,
+        }
     }
 
     fn feed(&mut self, bytes: &[u8]) -> io::Result<()> {
@@ -736,7 +790,8 @@ impl Chunked {
             };
             let line = &self.raw[..eol];
             let digits = line.split(|&b| b == b';').next().unwrap_or(line);
-            let text = std::str::from_utf8(digits).map_err(|_| bad("a chunk size that is not text"))?;
+            let text =
+                std::str::from_utf8(digits).map_err(|_| bad("a chunk size that is not text"))?;
             let size = usize::from_str_radix(text.trim(), 16)
                 .map_err(|_| bad("a chunk size that is not a number"))?;
             if size == 0 {
@@ -745,14 +800,18 @@ impl Chunked {
                 return Ok(());
             }
             if self.out.len() + size > MAX_BODY {
-                return Err(bad(format!("a response body past the {} MiB cap", MAX_BODY >> 20)));
+                return Err(bad(format!(
+                    "a response body past the {} MiB cap",
+                    MAX_BODY >> 20
+                )));
             }
             // The header, its line ending, the chunk, and the line ending
             // after it.
             if self.raw.len() < eol + 2 + size + 2 {
                 return Ok(());
             }
-            self.out.extend_from_slice(&self.raw[eol + 2..eol + 2 + size]);
+            self.out
+                .extend_from_slice(&self.raw[eol + 2..eol + 2 + size]);
             self.raw.drain(..eol + 2 + size + 2);
         }
     }
@@ -777,7 +836,10 @@ fn read_response<R: Read>(rd: &mut R) -> io::Result<(u16, Vec<u8>)> {
             break at + 4;
         }
         if buf.len() > HEAD_LIMIT {
-            return Err(bad(format!("a response head longer than {} KiB", HEAD_LIMIT >> 10)));
+            return Err(bad(format!(
+                "a response head longer than {} KiB",
+                HEAD_LIMIT >> 10
+            )));
         }
         match fill(rd, &mut chunk)? {
             0 => return Err(bad("the connection closed before the response head")),
@@ -794,7 +856,10 @@ fn read_response<R: Read>(rd: &mut R) -> io::Result<(u16, Vec<u8>)> {
     let body = match framing {
         Framing::Length(want) => {
             if want > MAX_BODY {
-                return Err(bad(format!("a Content-Length past the {} MiB cap", MAX_BODY >> 20)));
+                return Err(bad(format!(
+                    "a Content-Length past the {} MiB cap",
+                    MAX_BODY >> 20
+                )));
             }
             let mut body = rest;
             while body.len() < want {
@@ -825,7 +890,10 @@ fn read_response<R: Read>(rd: &mut R) -> io::Result<(u16, Vec<u8>)> {
                     n => body.extend_from_slice(&chunk[..n]),
                 }
                 if body.len() > MAX_BODY {
-                    return Err(bad(format!("a response body past the {} MiB cap", MAX_BODY >> 20)));
+                    return Err(bad(format!(
+                        "a response body past the {} MiB cap",
+                        MAX_BODY >> 20
+                    )));
                 }
             }
             body
@@ -876,10 +944,8 @@ mod tests {
         fn new(what: &str) -> Temp {
             static N: AtomicU32 = AtomicU32::new(0);
             let n = N.fetch_add(1, Ordering::Relaxed);
-            let dir = std::env::temp_dir().join(format!(
-                "anrb-hexdb-{what}-{}-{n}",
-                std::process::id()
-            ));
+            let dir =
+                std::env::temp_dir().join(format!("anrb-hexdb-{what}-{}-{n}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).expect("a temporary directory");
             Temp(dir)
@@ -911,16 +977,29 @@ mod tests {
         let tmp = Temp::new("restart");
         {
             let db = Hexdb::open(tmp.path(), ttl()).expect("open");
-            db.file(Kind::Aircraft, "3c6444", Some(r#"{"Registration":"D-AIUH"}"#));
+            db.file(
+                Kind::Aircraft,
+                "3c6444",
+                Some(r#"{"Registration":"D-AIUH"}"#),
+            );
             db.file(Kind::Route, "dlh2ab", Some(r#"{"route":"EDDM-EDDL"}"#));
             db.file(Kind::Airport, "eddl", Some(r#"{"airport":"Dusseldorf"}"#));
             assert_eq!(db.stats().4, 3);
         }
         let db = Hexdb::open(tmp.path(), ttl()).expect("reopen");
         assert_eq!(db.stats().4, 3);
-        assert_eq!(db.aircraft("3C6444"), Lookup::Found(r#"{"Registration":"D-AIUH"}"#.to_string()));
-        assert_eq!(db.route("DLH2AB"), Lookup::Found(r#"{"route":"EDDM-EDDL"}"#.to_string()));
-        assert_eq!(db.airport("EDDL"), Lookup::Found(r#"{"airport":"Dusseldorf"}"#.to_string()));
+        assert_eq!(
+            db.aircraft("3C6444"),
+            Lookup::Found(r#"{"Registration":"D-AIUH"}"#.to_string())
+        );
+        assert_eq!(
+            db.route("DLH2AB"),
+            Lookup::Found(r#"{"route":"EDDM-EDDL"}"#.to_string())
+        );
+        assert_eq!(
+            db.airport("EDDL"),
+            Lookup::Found(r#"{"airport":"Dusseldorf"}"#.to_string())
+        );
         // Three answers served from disk, nothing fetched.
         assert_eq!(db.stats().0, 3);
         assert_eq!(db.stats().1, 0);
@@ -946,8 +1025,14 @@ mod tests {
     #[test]
     fn an_old_entry_is_stale() {
         let now = now_secs();
-        let fresh = Entry { fetched: now, body: None };
-        let old = Entry { fetched: now - (10 * 24 * 60 * 60 + 60), body: None };
+        let fresh = Entry {
+            fetched: now,
+            body: None,
+        };
+        let old = Entry {
+            fetched: now - (10 * 24 * 60 * 60 + 60),
+            body: None,
+        };
         assert!(!fresh.stale(now, ttl()));
         assert!(old.stale(now, ttl()));
         // A clock that has jumped backwards leaves entries alone rather than
@@ -967,7 +1052,10 @@ mod tests {
             }
         }
         assert!(db.fresh("a/3C6444").is_none(), "past the ttl");
-        assert!(db.cached("a/3C6444").is_some(), "but still there to serve if hexdb is down");
+        assert!(
+            db.cached("a/3C6444").is_some(),
+            "but still there to serve if hexdb is down"
+        );
     }
 
     /// An address hexdb has never heard of is written down as such, so the
@@ -985,8 +1073,13 @@ mod tests {
         assert_eq!(db.aircraft("000001"), Lookup::Missing);
         assert_eq!(db.photo("000002"), None);
         assert_eq!(db.stats().1, 0, "nothing was fetched");
-        let e = db.peek(Kind::Aircraft, "000001").expect("the miss is an entry of its own");
-        assert_eq!(e.body, None, "written down as a miss rather than as an empty answer");
+        let e = db
+            .peek(Kind::Aircraft, "000001")
+            .expect("the miss is an entry of its own");
+        assert_eq!(
+            e.body, None,
+            "written down as a miss rather than as an empty answer"
+        );
     }
 
     /// The same string as an address, a callsign and a field is three entries.
@@ -1005,7 +1098,10 @@ mod tests {
         assert_eq!(db.route("EDDL"), Lookup::Found("route".to_string()));
         assert_eq!(db.airport("EDDL"), Lookup::Found("airport".to_string()));
         assert_eq!(db.aircraft("ABCDEF"), Lookup::Found("aircraft".to_string()));
-        assert_eq!(db.peek(Kind::Photo, "ABCDEF").and_then(|e| e.body), Some("ABCDEF.jpg".to_string()));
+        assert_eq!(
+            db.peek(Kind::Photo, "ABCDEF").and_then(|e| e.body),
+            Some("ABCDEF.jpg".to_string())
+        );
     }
 
     /// A log with a torn tail and a line from nowhere still gives up the
@@ -1029,14 +1125,24 @@ mod tests {
 
         let db = Hexdb::open(tmp.path(), ttl()).expect("open");
         assert_eq!(db.stats().4, 3, "the three that parse");
-        assert_eq!(db.aircraft("3C6444"), Lookup::Found("{\"ok\":1}".to_string()));
-        assert_eq!(db.airport("EDDL"), Lookup::Found("{\"airport\":\"Dusseldorf\"}".to_string()));
+        assert_eq!(
+            db.aircraft("3C6444"),
+            Lookup::Found("{\"ok\":1}".to_string())
+        );
+        assert_eq!(
+            db.airport("EDDL"),
+            Lookup::Found("{\"airport\":\"Dusseldorf\"}".to_string())
+        );
         assert_eq!(db.route("DLH2AB"), Lookup::Missing);
         // The lines that did not parse left nothing behind: a kind letter that
         // is not one, a fetch time that is not a number, a key of the wrong
         // shape, and the tail the power cut took.
         assert_eq!(db.peek(Kind::Aircraft, "3C6445"), None, "the kind letter q");
-        assert_eq!(db.peek(Kind::Aircraft, "3C6446"), None, "a fetch time of 'later'");
+        assert_eq!(
+            db.peek(Kind::Aircraft, "3C6446"),
+            None,
+            "a fetch time of 'later'"
+        );
     }
 
     /// The log stops growing without bound: rewriting the same key is
@@ -1047,16 +1153,30 @@ mod tests {
         {
             let db = Hexdb::open(tmp.path(), ttl()).expect("open");
             for i in 0..200 {
-                db.file(Kind::Aircraft, &format!("{:06X}", i % 4), Some(&format!("{{\"n\":{i}}}")));
+                db.file(
+                    Kind::Aircraft,
+                    &format!("{:06X}", i % 4),
+                    Some(&format!("{{\"n\":{i}}}")),
+                );
             }
             assert_eq!(db.stats().4, 4);
         }
         let text = fs::read_to_string(tmp.path().join("entries.log")).expect("the log");
-        assert!(text.lines().count() < 70, "compacted, not 200 lines: {}", text.lines().count());
-        assert!(!tmp.path().join("entries.tmp").exists(), "the temporary file is renamed, not left");
+        assert!(
+            text.lines().count() < 70,
+            "compacted, not 200 lines: {}",
+            text.lines().count()
+        );
+        assert!(
+            !tmp.path().join("entries.tmp").exists(),
+            "the temporary file is renamed, not left"
+        );
         let db = Hexdb::open(tmp.path(), ttl()).expect("reopen");
         assert_eq!(db.stats().4, 4);
-        assert_eq!(db.aircraft("000003"), Lookup::Found("{\"n\":199}".to_string()));
+        assert_eq!(
+            db.aircraft("000003"),
+            Lookup::Found("{\"n\":199}".to_string())
+        );
     }
 
     /// Nothing that is not a key hexdb could have gets as far as a request.
@@ -1074,7 +1194,11 @@ mod tests {
         assert_eq!(db.airport("ED"), Lookup::Missing, "too short for a field");
         assert_eq!(db.airport("EDDLX"), Lookup::Missing, "too long for a field");
         assert_eq!(db.photo("nope"), None);
-        assert_eq!(db.stats(), (0, 0, 0, 0, 0), "and nothing was counted as a lookup");
+        assert_eq!(
+            db.stats(),
+            (0, 0, 0, 0, 0),
+            "and nothing was counted as a lookup"
+        );
     }
 
     /// An image whose file has gone from under the entry reads as no image,
@@ -1088,8 +1212,16 @@ mod tests {
         db.file(Kind::Photo, "ABCDE0", Some("ABCDE0.jpg"));
         db.file(Kind::Photo, "ABCDE1", Some("../entries.log"));
         assert_eq!(db.photo("ABCDEF"), Some(b"\xff\xd8jpeg".to_vec()));
-        assert_eq!(db.photo("ABCDE0"), None, "the entry says there is one, the file is gone");
-        assert_eq!(db.photo("ABCDE1"), None, "and a name that climbs out of images/ is refused");
+        assert_eq!(
+            db.photo("ABCDE0"),
+            None,
+            "the entry says there is one, the file is gone"
+        );
+        assert_eq!(
+            db.photo("ABCDE1"),
+            None,
+            "and a name that climbs out of images/ is refused"
+        );
     }
 
     // ---- the response parser ----------------------------------------------
@@ -1126,11 +1258,17 @@ mod tests {
         ]);
         let (status, body) = read_response(&mut rd).expect("a response");
         assert_eq!(status, 200);
-        assert_eq!(body, b"{\"Registration\":\"", "exactly the seventeen bytes it promised");
+        assert_eq!(
+            body, b"{\"Registration\":\"",
+            "exactly the seventeen bytes it promised"
+        );
 
         // A 404 with a body of its own, all in one read.
         let mut rd = pieces(&["HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nno!"]);
-        assert_eq!(read_response(&mut rd).expect("a 404"), (404, b"no!".to_vec()));
+        assert_eq!(
+            read_response(&mut rd).expect("a 404"),
+            (404, b"no!".to_vec())
+        );
 
         // A body that stops short of what it promised is an error, not a
         // truncated answer filed as if it were whole.
@@ -1157,30 +1295,43 @@ mod tests {
 
         // One byte at a time, which is every split at once.
         let mut rd = Pieces(whole.bytes().map(|b| vec![b]).collect());
-        assert_eq!(read_response(&mut rd).expect("a response").1, br#"{"route":"EDDM-EDDL"}"#);
+        assert_eq!(
+            read_response(&mut rd).expect("a response").1,
+            br#"{"route":"EDDM-EDDL"}"#
+        );
     }
 
     #[test]
     fn a_chunked_body_ends_at_its_zero_chunk() {
         // Nothing but the terminator: an empty body, not an error.
         let mut rd = pieces(&["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n"]);
-        assert_eq!(read_response(&mut rd).expect("an empty body"), (200, Vec::new()));
+        assert_eq!(
+            read_response(&mut rd).expect("an empty body"),
+            (200, Vec::new())
+        );
 
         // A trailer after the zero chunk is read past and ignored.
         let mut rd = pieces(&[
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
             "4\r\nhexd\r\n2\r\nb!\r\n0\r\nX-Checksum: 7\r\n\r\n",
         ]);
-        assert_eq!(read_response(&mut rd).expect("a response").1, b"hexdb!".to_vec());
+        assert_eq!(
+            read_response(&mut rd).expect("a response").1,
+            b"hexdb!".to_vec()
+        );
 
         // A chunk extension on the size line, and upper-case hex.
         let mut rd = pieces(&[
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nA;name=value\r\n0123456789\r\n0\r\n\r\n",
         ]);
-        assert_eq!(read_response(&mut rd).expect("a response").1, b"0123456789".to_vec());
+        assert_eq!(
+            read_response(&mut rd).expect("a response").1,
+            b"0123456789".to_vec()
+        );
 
         // A body that stops before its last chunk is an error.
-        let mut rd = pieces(&["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nhexd\r\n"]);
+        let mut rd =
+            pieces(&["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nhexd\r\n"]);
         assert!(read_response(&mut rd).is_err());
 
         // A size that is not hex is refused rather than read as zero.
@@ -1213,8 +1364,10 @@ mod tests {
 
         let mut rd = pieces(&["HTTP/1.1 200 OK\r\n\r\nhttps://ex", "ample.invalid/a.jpg\n"]);
         let (status, body) = read_response(&mut rd).expect("a response");
-        assert_eq!((status, String::from_utf8_lossy(&body).trim().to_string()),
-                   (200, "https://example.invalid/a.jpg".to_string()));
+        assert_eq!(
+            (status, String::from_utf8_lossy(&body).trim().to_string()),
+            (200, "https://example.invalid/a.jpg".to_string())
+        );
     }
 
     /// The URL that comes back from hex-image-thumb, taken apart.
@@ -1224,8 +1377,15 @@ mod tests {
             split_https("https://hexdb.io/img/3C6444.jpg"),
             Some(("hexdb.io".to_string(), "/img/3C6444.jpg".to_string()))
         );
-        assert_eq!(split_https("https://hexdb.io"), Some(("hexdb.io".to_string(), "/".to_string())));
-        assert_eq!(split_https("http://hexdb.io/img.jpg"), None, "plain http is not fetched");
+        assert_eq!(
+            split_https("https://hexdb.io"),
+            Some(("hexdb.io".to_string(), "/".to_string()))
+        );
+        assert_eq!(
+            split_https("http://hexdb.io/img.jpg"),
+            None,
+            "plain http is not fetched"
+        );
         assert_eq!(split_https(""), None);
         assert_eq!(split_https("not a url"), None);
         assert_eq!(split_https("https://user@elsewhere.invalid/x"), None);
@@ -1249,8 +1409,539 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         db.record("a/3C6444", Some("{}".to_string()));
         drop(first);
-        assert!(waiter.join().expect("the waiting thread"), "it waited rather than fetching");
+        assert!(
+            waiter.join().expect("the waiting thread"),
+            "it waited rather than fetching"
+        );
         assert_eq!(db.aircraft("3C6444"), Lookup::Found("{}".to_string()));
         assert!(lock(&db.inflight).is_empty(), "and the claim is released");
+    }
+
+    // ---- requests to a local server ----------------------------------------
+
+    /// What the local server does with one connection.
+    enum Reply {
+        /// Send these bytes over TLS, then close cleanly.
+        Send(Vec<u8>),
+        /// Read the request, then hang up without an answer.
+        Hangup,
+    }
+
+    /// A response with a Content-Length.
+    fn http(status: &str, body: &[u8]) -> Reply {
+        let mut v = format!(
+            "HTTP/1.1 {status}\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        v.extend_from_slice(body);
+        Reply::Send(v)
+    }
+
+    /// A TLS server on 127.0.0.1 that takes one connection per reply, in
+    /// order. Joining it gives the request heads it read.
+    struct Upstream {
+        port: u16,
+        thread: std::thread::JoinHandle<Vec<String>>,
+    }
+
+    impl Upstream {
+        fn heads(self) -> Vec<String> {
+            self.thread.join().expect("the server thread")
+        }
+    }
+
+    fn upstream(replies: Vec<Reply>) -> Upstream {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("the bound address").port();
+        let config = Arc::new(crate::test_tls::server());
+        let thread = std::thread::spawn(move || {
+            let mut heads = Vec::new();
+            for reply in replies {
+                let (sock, _) = listener.accept().expect("accept");
+                sock.set_read_timeout(Some(Duration::from_secs(5)))
+                    .expect("a read timeout");
+                let conn =
+                    rustls::ServerConnection::new(Arc::clone(&config)).expect("a TLS session");
+                let mut tls = rustls::StreamOwned::new(conn, sock);
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    match tls.read(&mut byte) {
+                        Ok(1) => head.push(byte[0]),
+                        _ => break,
+                    }
+                }
+                heads.push(String::from_utf8_lossy(&head).into_owned());
+                if let Reply::Send(bytes) = reply {
+                    let _ = tls.write_all(&bytes);
+                    tls.conn.send_close_notify();
+                    let _ = tls.flush();
+                }
+            }
+            heads
+        });
+        Upstream { port, thread }
+    }
+
+    /// A port on 127.0.0.1 with nothing listening on it.
+    fn closed_port() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        listener.local_addr().expect("the bound address").port()
+    }
+
+    fn open_at(tmp: &Temp, port: u16) -> Hexdb {
+        Hexdb::open(tmp.path(), ttl())
+            .expect("open")
+            .pointed_at(port, crate::test_tls::client())
+    }
+
+    /// Make an entry older than the ttl, so the next lookup asks again.
+    fn expire(db: &Hexdb, kind: Kind, key: &str) {
+        let ck = cache_key(kind, &normalise(kind, key).expect("a valid key"));
+        lock(&db.store)
+            .entries
+            .get_mut(&ck)
+            .expect("the entry")
+            .fetched = 0;
+    }
+
+    /// A 200 is filed and served; the second lookup does not reach the
+    /// server, and the request names the host and the software.
+    #[test]
+    fn a_lookup_is_fetched_once_and_then_served_from_the_cache() {
+        let tmp = Temp::new("fetch");
+        let up = upstream(vec![http("200 OK", br#"{"Registration":"D-AIUH"}"#)]);
+        let db = open_at(&tmp, up.port);
+        let want = Lookup::Found(r#"{"Registration":"D-AIUH"}"#.to_string());
+        assert_eq!(db.aircraft("3c6444"), want);
+        assert_eq!(db.aircraft("3C6444"), want);
+        assert_eq!(db.stats(), (1, 1, 0, 0, 1));
+
+        let heads = up.heads();
+        assert_eq!(heads.len(), 1, "one request for two lookups");
+        assert!(
+            heads[0].starts_with("GET /api/v1/aircraft/3C6444 HTTP/1.1\r\n"),
+            "{}",
+            heads[0]
+        );
+        assert!(heads[0].contains("\r\nHost: 127.0.0.1\r\n"), "{}", heads[0]);
+        assert!(
+            heads[0].contains(&format!("\r\nUser-Agent: {USER_AGENT}\r\n")),
+            "{}",
+            heads[0]
+        );
+        assert!(
+            heads[0].contains("\r\nConnection: close\r\n"),
+            "{}",
+            heads[0]
+        );
+
+        drop(db);
+        let db = Hexdb::open(tmp.path(), ttl()).expect("reopen");
+        assert_eq!(db.aircraft("3C6444"), want, "and it was written to the log");
+    }
+
+    /// A 404 is a miss, filed so that it is not asked again.
+    #[test]
+    fn a_404_is_filed_as_a_miss() {
+        let tmp = Temp::new("404");
+        let up = upstream(vec![http("404 Not Found", b"{}")]);
+        let db = open_at(&tmp, up.port);
+        assert_eq!(db.route("dlh2ab"), Lookup::Missing);
+        assert_eq!(db.peek(Kind::Route, "DLH2AB").map(|e| e.body), Some(None));
+        assert_eq!(db.route("DLH2AB"), Lookup::Missing);
+        assert_eq!(db.stats(), (1, 1, 0, 0, 1));
+        let heads = up.heads();
+        assert_eq!(heads.len(), 1);
+        assert!(
+            heads[0].starts_with("GET /api/v1/route/icao/DLH2AB HTTP/1.1\r\n"),
+            "{}",
+            heads[0]
+        );
+    }
+
+    /// A status that is neither 200 nor 404 serves the expired entry if there
+    /// is one, and nothing otherwise. Neither answer is filed.
+    #[test]
+    fn an_unexpected_status_serves_the_expired_entry() {
+        let tmp = Temp::new("refused");
+        let up = upstream(vec![
+            http("503 Service Unavailable", b""),
+            http("301 Moved Permanently", b""),
+        ]);
+        let db = open_at(&tmp, up.port);
+        db.file(Kind::Airport, "EDDL", Some("old"));
+        expire(&db, Kind::Airport, "EDDL");
+
+        assert_eq!(db.airport("eddl"), Lookup::Found("old".to_string()));
+        assert_eq!(db.airport("LOWW"), Lookup::Unavailable);
+        // Two refused, one of them served from the expired entry.
+        assert_eq!(db.stats(), (1, 0, 2, 0, 1));
+        assert_eq!(
+            db.peek(Kind::Airport, "EDDL").map(|e| e.fetched),
+            Some(0),
+            "not refreshed"
+        );
+        let heads = up.heads();
+        assert!(
+            heads[0].starts_with("GET /api/v1/airport/icao/EDDL "),
+            "{}",
+            heads[0]
+        );
+        assert!(
+            heads[1].starts_with("GET /api/v1/airport/icao/LOWW "),
+            "{}",
+            heads[1]
+        );
+    }
+
+    /// A connection that is refused, one that hangs up without an answer, and
+    /// a body that is not UTF-8 are all failures: the expired entry is served
+    /// where there is one, and nothing is filed.
+    #[test]
+    fn a_failed_request_serves_the_expired_entry() {
+        let tmp = Temp::new("failed");
+        let db = open_at(&tmp, closed_port());
+        db.file(Kind::Aircraft, "3C6444", Some("old"));
+        expire(&db, Kind::Aircraft, "3C6444");
+        assert_eq!(db.aircraft("3C6444"), Lookup::Found("old".to_string()));
+        assert_eq!(db.route("DLH2AB"), Lookup::Unavailable);
+        assert_eq!(db.stats(), (1, 0, 0, 2, 1));
+
+        let up = upstream(vec![Reply::Hangup, http("200 OK", b"\xff\xfe not text")]);
+        let db = open_at(&tmp, up.port);
+        assert_eq!(db.route("DLH2AB"), Lookup::Unavailable, "no answer at all");
+        assert_eq!(
+            db.route("DLH2AC"),
+            Lookup::Unavailable,
+            "an answer that is not text"
+        );
+        assert_eq!(db.peek(Kind::Route, "DLH2AC"), None, "and it is not filed");
+        assert_eq!(db.stats().3, 2);
+        assert_eq!(up.heads().len(), 2);
+    }
+
+    /// The thumbnail URL, then the image: the bytes are handed over, written
+    /// under images/, and served from there the next time.
+    #[test]
+    fn a_photo_is_fetched_and_filed() {
+        let tmp = Temp::new("photo");
+        let up = upstream(vec![
+            http("200 OK", b"https://127.0.0.1/img/3C6444.jpg\r\n"),
+            http("200 OK", b"\xff\xd8jpeg"),
+        ]);
+        let db = open_at(&tmp, up.port);
+        assert_eq!(db.photo("3c6444"), Some(b"\xff\xd8jpeg".to_vec()));
+        assert_eq!(
+            fs::read(tmp.path().join("images/3C6444.jpg")).expect("the file"),
+            b"\xff\xd8jpeg"
+        );
+        assert_eq!(
+            db.peek(Kind::Photo, "3C6444").and_then(|e| e.body),
+            Some("3C6444.jpg".to_string())
+        );
+        assert_eq!(db.photo("3C6444"), Some(b"\xff\xd8jpeg".to_vec()));
+        assert_eq!(db.stats(), (1, 1, 0, 0, 1));
+
+        let heads = up.heads();
+        assert_eq!(heads.len(), 2);
+        assert!(
+            heads[0].starts_with("GET /hex-image-thumb?hex=3C6444 HTTP/1.1\r\n"),
+            "{}",
+            heads[0]
+        );
+        assert!(
+            heads[1].starts_with("GET /img/3C6444.jpg HTTP/1.1\r\n"),
+            "{}",
+            heads[1]
+        );
+    }
+
+    /// No thumbnail, a thumbnail URL that is not https, and an image that is
+    /// not there are all filed as no photograph.
+    #[test]
+    fn a_photo_that_is_not_there_is_filed_as_none() {
+        let tmp = Temp::new("nophoto");
+        let up = upstream(vec![
+            http("404 Not Found", b""),
+            http("200 OK", b"http://127.0.0.1/img/ABCDE1.jpg"),
+            http("200 OK", b"https://127.0.0.1/img/ABCDE2.jpg"),
+            http("404 Not Found", b""),
+        ]);
+        let db = open_at(&tmp, up.port);
+        for key in ["ABCDE0", "ABCDE1", "ABCDE2"] {
+            assert_eq!(db.photo(key), None, "{key}");
+            assert_eq!(
+                db.peek(Kind::Photo, key).map(|e| e.body),
+                Some(None),
+                "{key} is filed as a miss"
+            );
+        }
+        assert_eq!(db.stats(), (0, 3, 0, 0, 3));
+        assert_eq!(up.heads().len(), 4, "the plain http URL is not fetched");
+    }
+
+    /// When the thumbnail or the image cannot be had, the expired photograph
+    /// is served if there is one.
+    #[test]
+    fn a_failed_photo_serves_the_expired_one() {
+        let tmp = Temp::new("stalephoto");
+        let up = upstream(vec![
+            http("429 Too Many Requests", b""),
+            Reply::Hangup,
+            http("200 OK", b"https://127.0.0.1/img/ABCDE0.jpg"),
+            http("200 OK", b""),
+            http("200 OK", b"https://127.0.0.1/img/ABCDE1.jpg"),
+            Reply::Hangup,
+        ]);
+        let db = open_at(&tmp, up.port);
+        fs::write(tmp.path().join("images/ABCDEF.jpg"), b"old").expect("write the image");
+        db.file(Kind::Photo, "ABCDEF", Some("ABCDEF.jpg"));
+        expire(&db, Kind::Photo, "ABCDEF");
+
+        assert_eq!(
+            db.photo("ABCDEF"),
+            Some(b"old".to_vec()),
+            "a 429 for the thumbnail"
+        );
+        assert_eq!(
+            db.photo("ABCDEF"),
+            Some(b"old".to_vec()),
+            "no answer for the thumbnail"
+        );
+        assert_eq!(db.photo("ABCDE0"), None, "an empty image");
+        assert_eq!(db.photo("ABCDE1"), None, "no answer for the image");
+        assert_eq!(db.peek(Kind::Photo, "ABCDE0"), None, "nothing filed");
+        assert_eq!(db.peek(Kind::Photo, "ABCDE1"), None, "nothing filed");
+        // Refused: the 429 and the empty image. Failed: the two hangups.
+        assert_eq!(db.stats(), (2, 0, 2, 2, 1));
+        assert_eq!(up.heads().len(), 6);
+    }
+
+    /// An image that cannot be written is handed over this once and not
+    /// filed.
+    #[test]
+    fn a_photo_that_cannot_be_written_is_still_served() {
+        let tmp = Temp::new("readonly");
+        let up = upstream(vec![
+            http("200 OK", b"https://127.0.0.1/img/3C6444.jpg"),
+            http("200 OK", b"jpeg"),
+        ]);
+        let db = open_at(&tmp, up.port);
+        fs::remove_dir_all(tmp.path().join("images")).expect("remove images/");
+        assert_eq!(db.photo("3C6444"), Some(b"jpeg".to_vec()));
+        assert_eq!(db.peek(Kind::Photo, "3C6444"), None);
+        assert_eq!(db.stats(), (0, 0, 0, 1, 0));
+        assert!(
+            !tmp.path().join("images").exists(),
+            "and nothing was left behind"
+        );
+        assert_eq!(up.heads().len(), 2);
+    }
+
+    /// A lookup that finds another thread fetching the same key waits for it
+    /// and answers with whatever was filed, or with nothing.
+    #[test]
+    fn a_lookup_waits_for_the_fetch_already_running() {
+        let tmp = Temp::new("wait");
+        // Nothing listens, so a lookup that did not wait would fail rather
+        // than hang.
+        let db = Arc::new(open_at(&tmp, closed_port()));
+        fs::write(tmp.path().join("images/3C6444.jpg"), b"jpeg").expect("write the image");
+
+        let photo = db.claim("p/3C6444").expect("the claim");
+        let aircraft = db.claim("a/3C6444").expect("the claim");
+        let waiters = {
+            let (a, b) = (Arc::clone(&db), Arc::clone(&db));
+            (
+                std::thread::spawn(move || a.photo("3C6444")),
+                std::thread::spawn(move || b.aircraft("3C6444")),
+            )
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        db.record("p/3C6444", Some("3C6444.jpg".to_string()));
+        drop(photo);
+        drop(aircraft);
+        assert_eq!(
+            waiters.0.join().expect("the photo thread"),
+            Some(b"jpeg".to_vec())
+        );
+        assert_eq!(
+            waiters.1.join().expect("the aircraft thread"),
+            Lookup::Unavailable
+        );
+        assert!(lock(&db.inflight).is_empty());
+    }
+
+    /// A log that can no longer be written to is dropped, and the cache
+    /// carries on in memory.
+    #[test]
+    fn a_log_that_cannot_be_written_is_let_go() {
+        let tmp = Temp::new("nolog");
+        let db = Hexdb::open(tmp.path(), ttl()).expect("open");
+        db.file(Kind::Aircraft, "000001", Some("one"));
+        // A handle opened for reading only: the next append fails.
+        lock(&db.store).log = Some(File::open(tmp.path().join("entries.log")).expect("the log"));
+        db.file(Kind::Aircraft, "000002", Some("two"));
+        db.file(Kind::Aircraft, "000003", Some("three"));
+        assert!(lock(&db.store).log.is_none());
+        assert_eq!(lock(&db.store).lines, 1);
+        assert_eq!(db.aircraft("000003"), Lookup::Found("three".to_string()));
+        let text = fs::read_to_string(tmp.path().join("entries.log")).expect("the log");
+        assert_eq!(text.lines().count(), 1, "{text:?}");
+    }
+
+    /// A compaction that cannot write its new file leaves the old log as it
+    /// is, and appending goes on.
+    #[test]
+    fn a_compaction_that_cannot_write_leaves_the_log_alone() {
+        let tmp = Temp::new("nocompact");
+        // A directory where the temporary file would go.
+        fs::create_dir(tmp.path().join("entries.tmp")).expect("a directory in the way");
+        let db = Hexdb::open(tmp.path(), ttl()).expect("open");
+        for i in 0..100 {
+            db.file(
+                Kind::Aircraft,
+                &format!("{:06X}", i % 4),
+                Some(&format!("{i}")),
+            );
+        }
+        let text = fs::read_to_string(tmp.path().join("entries.log")).expect("the log");
+        assert_eq!(text.lines().count(), 100, "not compacted");
+        assert_eq!(db.stats().4, 4);
+        drop(db);
+        let db = Hexdb::open(tmp.path(), ttl()).expect("reopen");
+        assert_eq!(db.aircraft("000003"), Lookup::Found("99".to_string()));
+    }
+
+    /// A line whose answer marker is neither + nor - is skipped, and an
+    /// escape that escape() never writes is kept as it stands.
+    #[test]
+    fn odd_lines_and_escapes_are_read_safely() {
+        assert_eq!(parse_line("a 3C6444 5 ? {}"), None);
+        assert_eq!(parse_line("a 3C6444 5 +"), None, "a plus with no body");
+        assert_eq!(
+            parse_line("a 3c6444 5 + x"),
+            Some((
+                "a/3C6444".to_string(),
+                Entry {
+                    fetched: 5,
+                    body: Some("x".to_string())
+                }
+            ))
+        );
+        assert_eq!(unescape(r"a\tb"), r"a\tb");
+        assert_eq!(unescape("end\\"), "end\\");
+        assert_eq!(unescape(r"\\\n\r"), "\\\n\r");
+        for s in ["", "plain", "a\\b\nc\rd\\", "\\n"] {
+            assert_eq!(unescape(&escape(s)), s);
+        }
+        assert_eq!(
+            format_line(
+                "nokind",
+                &Entry {
+                    fetched: 1,
+                    body: None
+                }
+            ),
+            "? nokind 1 -\n"
+        );
+    }
+
+    /// A read that is interrupted is tried again, an end of file without a
+    /// close_notify is an end of file, and any other error is passed on.
+    #[test]
+    fn fill_folds_away_what_is_not_an_error() {
+        struct Script(Vec<io::Result<usize>>);
+        impl Read for Script {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                let next = self.0.remove(0);
+                if let Ok(n) = next {
+                    buf[..n].fill(b'x');
+                }
+                next
+            }
+        }
+        let mut buf = [0u8; 8];
+        let mut rd = Script(vec![Err(ErrorKind::Interrupted.into()), Ok(3)]);
+        assert_eq!(fill(&mut rd, &mut buf).expect("a read"), 3);
+        let mut rd = Script(vec![Err(ErrorKind::UnexpectedEof.into())]);
+        assert_eq!(fill(&mut rd, &mut buf).expect("an end"), 0);
+        let mut rd = Script(vec![Err(ErrorKind::ConnectionReset.into())]);
+        assert_eq!(
+            fill(&mut rd, &mut buf).expect_err("an error").kind(),
+            ErrorKind::ConnectionReset
+        );
+
+        // A piece longer than the buffer comes in more than one read.
+        let mut rd = pieces(&["abcdefghij"]);
+        assert_eq!(fill(&mut rd, &mut buf).expect("a read"), 8);
+        assert_eq!(fill(&mut rd, &mut buf).expect("a read"), 2);
+        assert_eq!(&buf[..2], b"ij");
+    }
+
+    /// Responses that are cut short, too big or not HTTP are errors.
+    #[test]
+    fn a_bad_response_is_an_error() {
+        let err = |parts: &[&str]| {
+            read_response(&mut pieces(parts))
+                .expect_err("an error")
+                .to_string()
+        };
+
+        assert!(err(&[]).contains("closed before the response head"));
+        assert!(err(&["HTTP/1.1 200 OK\r\n"]).contains("closed before the response head"));
+        assert!(err(&["SSH-2.0-OpenSSH\r\n\r\n"]).contains("not HTTP"));
+        assert!(err(&["HTTP/1.1 200 OK\r\nContent-Length: many\r\n\r\n"]).contains("not HTTP"));
+        let long = format!("HTTP/1.1 200 OK\r\nX-Long: {}", "a".repeat(HEAD_LIMIT + 1));
+        assert!(err(&[&long]).contains("head longer than 16 KiB"));
+        let huge = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n",
+            MAX_BODY + 1
+        );
+        assert!(err(&[&huge]).contains("Content-Length past the 4 MiB cap"));
+        let chunk = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n",
+            MAX_BODY + 1
+        );
+        assert!(err(&[&chunk]).contains("body past the 4 MiB cap"));
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{}",
+            "1".repeat(300)
+        );
+        assert!(err(&[&header]).contains("chunk header with no end"));
+
+        // A body with no length runs to the end of the connection, but not
+        // past the cap.
+        struct Endless(bool);
+        impl Read for Endless {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                if !self.0 {
+                    self.0 = true;
+                    let head = b"HTTP/1.1 200 OK\r\n\r\n";
+                    buf[..head.len()].copy_from_slice(head);
+                    return Ok(head.len());
+                }
+                buf.fill(b'x');
+                Ok(buf.len())
+            }
+        }
+        let e = read_response(&mut Endless(false)).expect_err("too big");
+        assert!(e.to_string().contains("body past the 4 MiB cap"), "{e}");
+    }
+
+    /// A chunk size that is not UTF-8 is refused, and anything fed after the
+    /// last chunk is ignored.
+    #[test]
+    fn the_chunk_decoder_stops_at_its_end() {
+        let mut dec = Chunked::new();
+        assert!(dec.feed(b"\xff\r\n").is_err());
+
+        let mut dec = Chunked::new();
+        dec.feed(b"3\r\nabc\r\n0\r\n").expect("two chunks");
+        assert!(dec.done);
+        dec.feed(b"5\r\nnever\r\n").expect("a trailer");
+        assert_eq!(dec.out, b"abc");
     }
 }

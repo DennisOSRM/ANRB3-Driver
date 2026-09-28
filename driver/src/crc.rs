@@ -16,7 +16,13 @@ pub struct SoftFix {
 
 /// Sub-phase cycle counts inside the soft search.
 #[derive(Default, Clone, Copy, Debug)]
-pub struct SoftPhases { pub crc: u64, pub select: u64, pub single: u64, pub pair: u64, pub calls: u64 }
+pub struct SoftPhases {
+    pub crc: u64,
+    pub select: u64,
+    pub single: u64,
+    pub pair: u64,
+    pub calls: u64,
+}
 
 /// Generator polynomial for the Mode-S 24-bit CRC.
 const POLY: u32 = 0x00FF_F409;
@@ -52,7 +58,9 @@ impl Crc {
         let mut c = Crc {
             #[cfg(feature = "profile")]
             soft_phases: std::cell::Cell::new(SoftPhases::default()),
-            table, synd56: [0; 56], synd112: [0; 112],
+            table,
+            synd56: [0; 56],
+            synd112: [0; 112],
         };
         for i in 0..56 {
             let mut buf = [0u8; 7];
@@ -77,7 +85,11 @@ impl Crc {
     }
 
     fn syndromes(&self, nbytes: usize) -> &[u32] {
-        if nbytes == 14 { &self.synd112 } else { &self.synd56 }
+        if nbytes == 14 {
+            &self.synd112
+        } else {
+            &self.synd56
+        }
     }
 
     /// Blind correction: try every single-bit flip, then every pair.
@@ -131,21 +143,36 @@ impl Crc {
             r
         }
         #[cfg(not(feature = "profile"))]
-        { self.soft_search(fr, margin, maxbits, &mut SoftPhases::default()) }
+        {
+            self.soft_search(fr, margin, maxbits, &mut SoftPhases::default())
+        }
     }
 
-    fn soft_search(&self, fr: &mut [u8], margin: &[i8], maxbits: u8, ph: &mut SoftPhases) -> SoftFix {
+    fn soft_search(
+        &self,
+        fr: &mut [u8],
+        margin: &[i8],
+        maxbits: u8,
+        ph: &mut SoftPhases,
+    ) -> SoftFix {
         let nbytes = fr.len();
         let nbits = nbytes * 8;
         let t = self.syndromes(nbytes);
         let t0 = tick();
         let s = self.crc24(fr);
-        ph.crc += tick().wrapping_sub(t0); ph.calls += 1;
+        ph.crc += tick().wrapping_sub(t0);
+        ph.calls += 1;
         if s == 0 {
-            return SoftFix { bits: Some(0), searched: false };
+            return SoftFix {
+                bits: Some(0),
+                searched: false,
+            };
         }
         if maxbits < 1 {
-            return SoftFix { bits: None, searched: false };
+            return SoftFix {
+                bits: None,
+                searched: false,
+            };
         }
         let t_sel = tick();
 
@@ -174,7 +201,9 @@ impl Crc {
         let mut nidx = 0usize;
         'fill: for v in 0..5 {
             for &i in &bucket[v][..bn[v]] {
-                if nidx == Self::SOFT_K { break 'fill; }
+                if nidx == Self::SOFT_K {
+                    break 'fill;
+                }
                 idx[nidx] = i as usize;
                 nidx += 1;
             }
@@ -193,12 +222,18 @@ impl Crc {
                 let i = idx[k];
                 fr[i >> 3] ^= 0x80 >> (i & 7);
                 ph.single += tick().wrapping_sub(t3);
-                return SoftFix { bits: Some(1), searched: true };
+                return SoftFix {
+                    bits: Some(1),
+                    searched: true,
+                };
             }
         }
         ph.single += tick().wrapping_sub(t3);
         if maxbits < 2 {
-            return SoftFix { bits: None, searched: true };
+            return SoftFix {
+                bits: None,
+                searched: true,
+            };
         }
         let t4 = tick();
         for k in 0..nidx {
@@ -209,12 +244,18 @@ impl Crc {
                     fr[a >> 3] ^= 0x80 >> (a & 7);
                     fr[b >> 3] ^= 0x80 >> (b & 7);
                     ph.pair += tick().wrapping_sub(t4);
-                    return SoftFix { bits: Some(2), searched: true };
+                    return SoftFix {
+                        bits: Some(2),
+                        searched: true,
+                    };
                 }
             }
         }
         ph.pair += tick().wrapping_sub(t4);
-        SoftFix { bits: None, searched: true }
+        SoftFix {
+            bits: None,
+            searched: true,
+        }
     }
 
     /// The syndrome an address produces when XORed into the parity field.
@@ -230,12 +271,16 @@ impl Crc {
 }
 
 impl Default for Crc {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Inverse of [`Crc::ap_syndrome`], built once by Gaussian elimination over
 /// GF(2) on the 24 basis images.
-pub struct ApMap { inv: [u32; 24] }
+pub struct ApMap {
+    inv: [u32; 24],
+}
 
 impl ApMap {
     pub fn new(crc: &Crc) -> Self {
@@ -247,24 +292,35 @@ impl ApMap {
         }
         let mut row = 0usize;
         for col in (0..24).rev() {
-            let Some(piv) = (row..24).find(|&r| (b[r] >> col) & 1 == 1) else { continue };
+            let Some(piv) = (row..24).find(|&r| (b[r] >> col) & 1 == 1) else {
+                continue;
+            };
             b.swap(row, piv);
             i.swap(row, piv);
             for r in 0..24 {
-                if r != row && (b[r] >> col) & 1 == 1 { b[r] ^= b[row]; i[r] ^= i[row]; }
+                if r != row && (b[r] >> col) & 1 == 1 {
+                    b[r] ^= b[row];
+                    i[r] ^= i[row];
+                }
             }
             row += 1;
         }
         let mut inv = [0u32; 24];
         for r in 0..24 {
-            if let Some(col) = (0..24).find(|&c| (b[r] >> c) & 1 == 1) { inv[col] = i[r]; }
+            if let Some(col) = (0..24).find(|&c| (b[r] >> c) & 1 == 1) {
+                inv[col] = i[r];
+            }
         }
         ApMap { inv }
     }
     /// Recover the address from a frame's syndrome.
     pub fn address(&self, syndrome: u32) -> u32 {
         let mut a = 0u32;
-        for k in 0..24 { if (syndrome >> k) & 1 == 1 { a ^= self.inv[k]; } }
+        for k in 0..24 {
+            if (syndrome >> k) & 1 == 1 {
+                a ^= self.inv[k];
+            }
+        }
         a
     }
 }
@@ -275,10 +331,12 @@ mod tests {
 
     /// A real DF17 frame from the receiver; the CRC of a good frame is zero.
     fn good_frame() -> Vec<u8> {
-        (0..14).map(|i| {
-            let s = "8d4009da5833318e2bd82af8c6f5";
-            u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap()
-        }).collect()
+        (0..14)
+            .map(|i| {
+                let s = "8d4009da5833318e2bd82af8c6f5";
+                u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap()
+            })
+            .collect()
     }
 
     #[test]
@@ -304,7 +362,11 @@ mod tests {
         let mut f = good_frame();
         f[2] ^= 0x10;
         f[9] ^= 0x04;
-        assert_eq!(c.fix(&mut f.clone(), false), None, "1-bit search must not claim it");
+        assert_eq!(
+            c.fix(&mut f.clone(), false),
+            None,
+            "1-bit search must not claim it"
+        );
         assert_eq!(c.fix(&mut f, true), Some(2));
         assert_eq!(f, good_frame());
     }
@@ -328,5 +390,89 @@ mod tests {
         let mut m2 = [4i8; 112];
         m2[60..80].fill(0);
         assert_eq!(c.fix_soft(&mut g, &m2, 2).bits, None);
+    }
+
+    /// A clean frame is left alone, and says it was not searched.
+    #[test]
+    fn a_clean_frame_needs_no_fix() {
+        let c = Crc::default();
+        let mut f = good_frame();
+        assert_eq!(c.fix(&mut f, true), Some(0));
+        let r = c.fix_soft(&mut f, &[0; 112], 2);
+        assert_eq!((r.bits, r.searched), (Some(0), false));
+        assert_eq!(f, good_frame());
+    }
+
+    /// Three wrong bits are more than either search repairs, and the frame
+    /// is left as it was.
+    #[test]
+    fn three_bit_errors_are_not_fixed() {
+        let c = Crc::new();
+        let mut f = good_frame();
+        f[0] ^= 0x01;
+        f[5] ^= 0x10;
+        f[12] ^= 0x80;
+        let bad = f.clone();
+        assert_eq!(c.fix(&mut f, true), None);
+        assert_eq!(f, bad);
+        let r = c.fix_soft(&mut f, &[0; 112], 2);
+        assert_eq!((r.bits, r.searched), (None, true));
+        assert_eq!(f, bad);
+    }
+
+    /// Two wrong bits among the least confident are repaired by the soft
+    /// search, but only when it is allowed two; with none allowed it does not
+    /// search at all.
+    #[test]
+    fn soft_search_repairs_a_pair() {
+        let c = Crc::new();
+        let mut f = good_frame();
+        f[3] ^= 0x02;
+        f[10] ^= 0x40;
+        let mut margin = [4i8; 112];
+        margin[3 * 8 + 6] = 1;
+        margin[10 * 8 + 1] = -2;
+        margin[50] = 0;
+
+        let bad = f.clone();
+        let r = c.fix_soft(&mut f, &margin, 0);
+        assert_eq!((r.bits, r.searched), (None, false));
+        let r = c.fix_soft(&mut f, &margin, 1);
+        assert_eq!((r.bits, r.searched), (None, true));
+        assert_eq!(f, bad, "a failed search changes nothing");
+        let r = c.fix_soft(&mut f, &margin, 2);
+        assert_eq!((r.bits, r.searched), (Some(2), true));
+        assert_eq!(f, good_frame());
+    }
+
+    /// Short frames use their own syndrome table.
+    #[test]
+    fn a_short_frame_is_corrected() {
+        let c = Crc::new();
+        let mut good = vec![0x5d, 0x3c, 0x65, 0x51, 0, 0, 0];
+        let p = c.crc24(&good[..4]);
+        good[4..].copy_from_slice(&[(p >> 16) as u8, (p >> 8) as u8, p as u8]);
+        assert_eq!(c.crc24(&good), 0);
+        let mut f = good.clone();
+        f[2] ^= 0x08;
+        assert_eq!(c.fix(&mut f, false), Some(1));
+        assert_eq!(f, good);
+        f[1] ^= 0x01;
+        f[6] ^= 0x20;
+        let mut margin = [4i8; 56];
+        margin[15] = 0;
+        margin[50] = 0;
+        assert_eq!(c.fix_soft(&mut f, &margin, 2).bits, Some(2));
+        assert_eq!(f, good);
+    }
+
+    /// The address map undoes the address syndrome.
+    #[test]
+    fn the_address_comes_back_from_its_syndrome() {
+        let c = Crc::new();
+        let ap = ApMap::new(&c);
+        for a in [0, 1, 0x4009DA, 0x3C6551, 0xFFFFFF, 0x800000] {
+            assert_eq!(ap.address(c.ap_syndrome(a)), a, "{a:06X}");
+        }
     }
 }

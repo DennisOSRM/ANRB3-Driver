@@ -27,18 +27,35 @@ impl Frame {
     /// downlink format calls for. Nothing about its parity is checked here.
     pub fn new(bytes: &[u8], ms: u32) -> Option<Frame> {
         let want = if bytes.first()? >> 3 < 16 { 7 } else { 14 };
-        if bytes.len() != want { return None; }
+        if bytes.len() != want {
+            return None;
+        }
         let mut b = [0u8; 14];
         b[..want].copy_from_slice(bytes);
-        Some(Frame { bytes: b, len: want as u8, corrected: 0, ms })
+        Some(Frame {
+            bytes: b,
+            len: want as u8,
+            corrected: 0,
+            ms,
+        })
     }
-    pub fn as_bytes(&self) -> &[u8] { &self.bytes[..self.len as usize] }
-    pub fn len(&self) -> usize { self.len as usize }
-    pub fn is_empty(&self) -> bool { self.len == 0 }
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes[..self.len as usize]
+    }
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
     /// Downlink format, the first 5 bits.
-    pub fn df(&self) -> u8 { self.bytes[0] >> 3 }
+    pub fn df(&self) -> u8 {
+        self.bytes[0] >> 3
+    }
     /// 24-bit ICAO address. Meaningful for DF 11, 17 and 18.
-    pub fn icao(&self) -> u32 { icao(&self.bytes) }
+    pub fn icao(&self) -> u32 {
+        icao(&self.bytes)
+    }
     /// ADS-B type code, for the 112-bit extended squitters only.
     pub fn type_code(&self) -> Option<u8> {
         if self.len == 14 && matches!(self.df(), 17 | 18) {

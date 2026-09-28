@@ -1,96 +1,312 @@
 <!doctype html>
-<meta charset="utf-8">
+<meta charset="utf-8" />
 <title>RadarBox live tracks</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css"
+/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
 <script src="tracks.js"></script>
 <script src="countries.js"></script>
 <style>
-  :root{
-    --ink:#e8edf4; --ink2:#9aa8b8; --panel:#12171f; --panel2:#1b222c;
-    --rule:#2a3441; --accent:#ffb454;
-    --mono:ui-monospace,SFMono-Regular,Menlo,"IBM Plex Mono",monospace;
-    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  :root {
+    --ink: #e8edf4;
+    --ink2: #9aa8b8;
+    --panel: #12171f;
+    --panel2: #1b222c;
+    --rule: #2a3441;
+    --accent: #ffb454;
+    --mono: ui-monospace, SFMono-Regular, Menlo, 'IBM Plex Mono', monospace;
+    --sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
-  html,body{margin:0;height:100%;background:#0b0e13;color:var(--ink);font-family:var(--sans)}
-  #map{position:absolute;inset:0}
-  .card{position:absolute;background:var(--panel);border:1px solid var(--rule);
-        border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
-  #hud{top:12px;left:12px;padding:12px 14px;min-width:210px}
-  #hud h1{margin:0 0 2px;font-size:.82rem;letter-spacing:.14em;text-transform:uppercase;
-          color:var(--accent);font-weight:600}
-  #hud .sub{font-size:.72rem;color:var(--ink2);margin-bottom:10px}
-  #hud dl{display:grid;grid-template-columns:auto auto;gap:3px 14px;margin:0;
-          font-family:var(--mono);font-size:.76rem}
-  #hud dt{color:var(--ink2)} #hud dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-  #hud .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
-  .live{background:#5ad18a} .dead{background:#e0575b}
-  #maperr{display:none;top:12px;left:50%;transform:translateX(-50%);padding:9px 14px;
-          font-size:.78rem;color:#ffc9a3;border-color:#5a3a22;max-width:70vw}
-  #legend{bottom:12px;left:12px;padding:10px 12px}
-  #legend .t{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:7px}
-  #ramp{width:186px;height:9px;border-radius:2px}
-  #legend .ticks{display:flex;justify-content:space-between;width:186px;margin-top:4px;
-                 font-family:var(--mono);font-size:.64rem;color:var(--ink2)}
-  #legend .note{margin-top:9px;font-size:.68rem;color:var(--ink2);line-height:1.45;max-width:200px}
-  #legend .dash{display:inline-block;width:22px;border-top:2px dashed var(--ink2);
-                transform:translateY(-3px);margin-right:5px}
-  .maplibregl-popup-content{background:var(--panel2);color:var(--ink);border:1px solid var(--rule);
-        border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:.68rem;
-        min-width:0;max-width:min(272px, calc(100vw - 24px))}
-  .maplibregl-popup-tip{border-top-color:var(--panel2)!important;border-bottom-color:var(--panel2)!important}
-  .maplibregl-popup-close-button{color:var(--ink2);font-size:14px;padding:1px 5px}
-  .pop h2{margin:0 0 5px;font-size:.76rem;font-family:var(--sans);letter-spacing:.02em}
-  .pop h2 span{color:var(--ink2);font-weight:400;font-size:.66rem;margin-left:5px}
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: #0b0e13;
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+  #map {
+    position: absolute;
+    inset: 0;
+  }
+  .card {
+    position: absolute;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  }
+  #hud {
+    top: 12px;
+    left: 12px;
+    padding: 12px 14px;
+    min-width: 210px;
+  }
+  #hud h1 {
+    margin: 0 0 2px;
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  #hud .sub {
+    font-size: 0.72rem;
+    color: var(--ink2);
+    margin-bottom: 10px;
+  }
+  #hud dl {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 3px 14px;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+  }
+  #hud dt {
+    color: var(--ink2);
+  }
+  #hud dd {
+    margin: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  #hud .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .live {
+    background: #5ad18a;
+  }
+  .dead {
+    background: #e0575b;
+  }
+  #maperr {
+    display: none;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 9px 14px;
+    font-size: 0.78rem;
+    color: #ffc9a3;
+    border-color: #5a3a22;
+    max-width: 70vw;
+  }
+  #legend {
+    bottom: 12px;
+    left: 12px;
+    padding: 10px 12px;
+  }
+  #legend .t {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink2);
+    margin-bottom: 7px;
+  }
+  #ramp {
+    width: 186px;
+    height: 9px;
+    border-radius: 2px;
+  }
+  #legend .ticks {
+    display: flex;
+    justify-content: space-between;
+    width: 186px;
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    color: var(--ink2);
+  }
+  #legend .note {
+    margin-top: 9px;
+    font-size: 0.68rem;
+    color: var(--ink2);
+    line-height: 1.45;
+    max-width: 200px;
+  }
+  #legend .dash {
+    display: inline-block;
+    width: 22px;
+    border-top: 2px dashed var(--ink2);
+    transform: translateY(-3px);
+    margin-right: 5px;
+  }
+  .maplibregl-popup-content {
+    background: var(--panel2);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    min-width: 0;
+    max-width: min(272px, calc(100vw - 24px));
+  }
+  .maplibregl-popup-tip {
+    border-top-color: var(--panel2) !important;
+    border-bottom-color: var(--panel2) !important;
+  }
+  .maplibregl-popup-close-button {
+    color: var(--ink2);
+    font-size: 14px;
+    padding: 1px 5px;
+  }
+  .pop h2 {
+    margin: 0 0 5px;
+    font-size: 0.76rem;
+    font-family: var(--sans);
+    letter-spacing: 0.02em;
+  }
+  .pop h2 span {
+    color: var(--ink2);
+    font-weight: 400;
+    font-size: 0.66rem;
+    margin-left: 5px;
+  }
   /* Flags are emoji: two regional-indicator letters, drawn by the colour
      emoji font. Where there is none (Windows has no flag glyphs) the pair
      falls back to the two letters of the code, which still reads. */
-  .pop h2 .flag{margin:0 6px 0 0;font-size:.88rem;vertical-align:-1px;color:var(--ink);
-    font-family:"Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji","Twemoji Mozilla",sans-serif}
+  .pop h2 .flag {
+    margin: 0 6px 0 0;
+    font-size: 0.88rem;
+    vertical-align: -1px;
+    color: var(--ink);
+    font-family:
+      'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI Emoji', 'Twemoji Mozilla', sans-serif;
+  }
   /* Fixed layout so one long value cannot widen the popup: the label column
      is what it needs, and anything too long for the rest is cut with an
      ellipsis and named in full on hover. */
-  .pop table{border-collapse:collapse;width:100%;table-layout:fixed}
-  .pop td{padding:1px 0;white-space:nowrap}
-  .pop td:first-child{width:5.4rem;color:var(--ink2);padding-right:10px}
-  .pop td:last-child{overflow:hidden;text-overflow:ellipsis;text-align:right;font-variant-numeric:tabular-nums}
+  .pop table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+  }
+  .pop td {
+    padding: 1px 0;
+    white-space: nowrap;
+  }
+  .pop td:first-child {
+    width: 5.4rem;
+    color: var(--ink2);
+    padding-right: 10px;
+  }
+  .pop td:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
   /* The second block is what the crew has set, which only Beast carries. */
-  .pop tr.sep td{border-top:1px solid var(--rule);padding-top:4px}
-  .pop .emerg{color:#ff6b6b;font-weight:600}
-  .pop .dim{color:var(--ink2)}
+  .pop tr.sep td {
+    border-top: 1px solid var(--rule);
+    padding-top: 4px;
+  }
+  .pop .emerg {
+    color: #ff6b6b;
+    font-weight: 600;
+  }
+  .pop .dim {
+    color: var(--ink2);
+  }
   /* A photograph of the airframe, kept to a strip: it identifies the aircraft
      at a glance. */
-  .pop img.shot{display:block;width:100%;height:60px;object-fit:cover;border-radius:4px;
-                margin:0 0 6px;background:var(--panel)}
-  .pop h2 img.logo{height:11px;width:auto;margin-right:5px;vertical-align:-1px;border-radius:2px}
+  .pop img.shot {
+    display: block;
+    width: 100%;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    margin: 0 0 6px;
+    background: var(--panel);
+  }
+  .pop h2 img.logo {
+    height: 11px;
+    width: auto;
+    margin-right: 5px;
+    vertical-align: -1px;
+    border-radius: 2px;
+  }
   /* Routes are crowd-sourced and go stale; the shade says how much to trust it. */
-  .pop .r-new{color:var(--ink)} .pop .r-old{color:var(--ink2)}
-  .pop .r-stale{color:#c9a227}
-  .pop .mode{display:inline-block;margin-left:3px;padding:0 3px;border:1px solid var(--rule);
-             border-radius:3px;font-size:.6rem;color:var(--accent)}
-  @media (max-width:560px){ #hud{min-width:0} #legend .note{max-width:150px} }
+  .pop .r-new {
+    color: var(--ink);
+  }
+  .pop .r-old {
+    color: var(--ink2);
+  }
+  .pop .r-stale {
+    color: #c9a227;
+  }
+  .pop .mode {
+    display: inline-block;
+    margin-left: 3px;
+    padding: 0 3px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    font-size: 0.6rem;
+    color: var(--accent);
+  }
+  @media (max-width: 560px) {
+    #hud {
+      min-width: 0;
+    }
+    #legend .note {
+      max-width: 150px;
+    }
+  }
 
   /* MapLibre's controls default to white boxes, which glare on a night map.
      The attribution has to stay legible - it is a licence condition - so it
      gets the panel ground rather than being hidden or faded out. */
-  .maplibregl-ctrl-group{background:var(--panel);border:1px solid var(--rule)}
-  .maplibregl-ctrl-group:not(:empty){box-shadow:none}
-  .maplibregl-ctrl-group button+button{border-top:1px solid var(--rule)}
-  .maplibregl-ctrl-group button:hover{background-color:var(--panel2)}
+  .maplibregl-ctrl-group {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+  }
+  .maplibregl-ctrl-group:not(:empty) {
+    box-shadow: none;
+  }
+  .maplibregl-ctrl-group button + button {
+    border-top: 1px solid var(--rule);
+  }
+  .maplibregl-ctrl-group button:hover {
+    background-color: var(--panel2);
+  }
   /* The compass is shown only once the map is off north (easy to do by
      accident on a touch screen). */
-  #map .compass-idle{opacity:0;pointer-events:none;transform:scale(.85)}
-  #map .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass){
-        transition:opacity .25s ease, transform .25s ease}
-  @media (prefers-reduced-motion:reduce){
-    #map .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass){transition:none}
+  #map .compass-idle {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.85);
+  }
+  #map .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) {
+    transition:
+      opacity 0.25s ease,
+      transform 0.25s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #map .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) {
+      transition: none;
+    }
   }
   .maplibregl-ctrl-group .maplibregl-ctrl-icon,
-  .maplibregl-ctrl-attrib-button{filter:invert(1) brightness(.88)}
+  .maplibregl-ctrl-attrib-button {
+    filter: invert(1) brightness(0.88);
+  }
   .maplibregl-ctrl.maplibregl-ctrl-attrib,
-  .maplibregl-ctrl-attrib.maplibregl-compact{background:rgba(18,23,31,.88);color:var(--ink2)}
-  .maplibregl-ctrl-attrib a{color:#b9c6d6}
+  .maplibregl-ctrl-attrib.maplibregl-compact {
+    background: rgba(18, 23, 31, 0.88);
+    color: var(--ink2);
+  }
+  .maplibregl-ctrl-attrib a {
+    color: #b9c6d6;
+  }
 </style>
 
 <div id="map"></div>
@@ -99,778 +315,1170 @@
   <h1>RadarBox live</h1>
   <div class="sub"><span id="dot" class="dot dead"></span><span id="conn">connecting</span></div>
   <dl>
-    <dt>aircraft</dt><dd id="n-ac">0</dd>
-    <dt>with track</dt><dd id="n-tr">0</dd>
-    <dt id="n-ln-t">messages</dt><dd id="n-ln">0</dd>
-    <dt>messages/s</dt><dd id="n-rate">—</dd>
-    <dt>points held</dt><dd id="n-pt">0</dd>
-    <dt>map</dt><dd id="n-map">loading</dd>
-    <dt>you</dt><dd id="n-me">locating</dd>
+    <dt>aircraft</dt>
+    <dd id="n-ac">0</dd>
+    <dt>with track</dt>
+    <dd id="n-tr">0</dd>
+    <dt id="n-ln-t">messages</dt>
+    <dd id="n-ln">0</dd>
+    <dt>messages/s</dt>
+    <dd id="n-rate">—</dd>
+    <dt>points held</dt>
+    <dd id="n-pt">0</dd>
+    <dt>map</dt>
+    <dd id="n-map">loading</dd>
+    <dt>you</dt>
+    <dd id="n-me">locating</dd>
   </dl>
 </div>
 <div id="legend" class="card">
   <div class="t">Altitude</div>
   <div id="ramp"></div>
   <div class="ticks"><span>0</span><span>20k</span><span>40k ft</span></div>
-  <div class="note"><span class="dash"></span>gap — aircraft was lost and came back inside the
-    <span id="n-hist">15&nbsp;min</span> window</div>
+  <div class="note">
+    <span class="dash"></span>gap — aircraft was lost and came back inside the
+    <span id="n-hist">15&nbsp;min</span> window
+  </div>
 </div>
 
 <script>
-// The rules for what gets drawn live in tracks.js so they can be tested
-// without a browser - see test_tracks.cjs.
-/* Viridis with its dark end raised in OKLab (L 0.29→0.60) for a dark map;
+  // The rules for what gets drawn live in tracks.js so they can be tested
+  // without a browser - see test_tracks.cjs.
+  /* Viridis with its dark end raised in OKLab (L 0.29→0.60) for a dark map;
    lightness still increases with altitude. Lowest-stop contrast against the
    ground is 4.6:1, highest 15.5:1. */
-const RAMP = [0,'#a263b4', 5000,'#868dd7', 10000,'#68b3ca',
-              20000,'#59d2ac', 30000,'#90e868', 40000,'#fde725'];
+  const RAMP = [
+    0,
+    '#a263b4',
+    5000,
+    '#868dd7',
+    10000,
+    '#68b3ca',
+    20000,
+    '#59d2ac',
+    30000,
+    '#90e868',
+    40000,
+    '#fde725',
+  ];
 
-// The legend is built from RAMP at the stops' true positions.
-(function(){
-  const top = RAMP[RAMP.length-2], stops = [];
-  for(let i = 0; i < RAMP.length; i += 2)
-    stops.push(RAMP[i+1] + ' ' + (100*RAMP[i]/top).toFixed(1) + '%');
-  document.getElementById('ramp').style.background = 'linear-gradient(90deg,' + stops.join(',') + ')';
-})();
+  // The legend is built from RAMP at the stops' true positions.
+  (function () {
+    const top = RAMP[RAMP.length - 2],
+      stops = [];
+    for (let i = 0; i < RAMP.length; i += 2)
+      stops.push(RAMP[i + 1] + ' ' + ((100 * RAMP[i]) / top).toFixed(1) + '%');
+    document.getElementById('ramp').style.background =
+      'linear-gradient(90deg,' + stops.join(',') + ')';
+  })();
 
-// icao -> {meta, pts:[[tSec,lon,lat,alt],...], lastSeen, info, route, photo, logo}
-const fleet = new Map();
-// Module state is declared before any code runs, because startWS() is called
-// during map setup.
-let since = 0, selected = null, popup = null, mapReady = false;
-// The bridge's clock, and how long it waits before dropping a quiet aircraft,
-// so the page can fade one out over the last seconds before it goes. How long
-// the bridge keeps a track's points, so the page keeps them as long.
-let clockSkew = 0, inactive = 60, fading = false, historyMs = Tracks.HISTORY_MS;
-let lastOk = 0, feedUp = false, source = 'feed', logos = false, lookups = false;
-let transport = 'connecting', ws = null, pollTimer = null;
+  // icao -> {meta, pts:[[tSec,lon,lat,alt],...], lastSeen, info, route, photo, logo}
+  const fleet = new Map();
+  // Module state is declared before any code runs, because startWS() is called
+  // during map setup.
+  let since = 0,
+    selected = null,
+    popup = null,
+    mapReady = false;
+  // The bridge's clock, and how long it waits before dropping a quiet aircraft,
+  // so the page can fade one out over the last seconds before it goes. How long
+  // the bridge keeps a track's points, so the page keeps them as long.
+  let clockSkew = 0,
+    inactive = 60,
+    fading = false,
+    historyMs = Tracks.HISTORY_MS;
+  let lastOk = 0,
+    feedUp = false,
+    source = 'feed',
+    logos = false,
+    lookups = false;
+  let transport = 'connecting',
+    ws = null,
+    pollTimer = null;
 
-const map = new maplibregl.Map({
-  container:'map',
-  style:'https://tiles.openfreemap.org/styles/dark',
-  center:[8.57,50.05], zoom:7, attributionControl:{compact:true}
-});
-map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/dark',
+    center: [8.57, 50.05],
+    zoom: 7,
+    attributionControl: { compact: true },
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
-/* A compass of its own below the zoom buttons, shown only when the map is not
+  /* A compass of its own below the zoom buttons, shown only when the map is not
    north-up. Its needle follows the bearing and a click puts the map back, both
    of which MapLibre does; the page only decides when it is worth showing. */
-map.addControl(new maplibregl.NavigationControl(
-  {showZoom:false, showCompass:true, visualizePitch:true}), 'top-right');
-const compassGroup = document.querySelector('.maplibregl-ctrl-compass').parentElement;
-function showCompass(){
-  const level = Math.abs(map.getBearing()) < 0.5 && map.getPitch() < 0.5;
-  compassGroup.classList.toggle('compass-idle', level);
-  compassGroup.setAttribute('aria-hidden', level ? 'true' : 'false');
-}
-map.on('rotate', showCompass);
-map.on('pitch', showCompass);
-showCompass();
-map.on('error', e=>{
-  const m = (e && e.error && e.error.message) || 'failed to load';
-  const el = document.getElementById('maperr');
-  el.textContent = 'Map: ' + m;
-  el.style.display = 'block';
-});
+  map.addControl(
+    new maplibregl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }),
+    'top-right',
+  );
+  const compassGroup = document.querySelector('.maplibregl-ctrl-compass').parentElement;
+  function showCompass() {
+    const level = Math.abs(map.getBearing()) < 0.5 && map.getPitch() < 0.5;
+    compassGroup.classList.toggle('compass-idle', level);
+    compassGroup.setAttribute('aria-hidden', level ? 'true' : 'false');
+  }
+  map.on('rotate', showCompass);
+  map.on('pitch', showCompass);
+  showCompass();
+  map.on('error', (e) => {
+    const m = (e && e.error && e.error.message) || 'failed to load';
+    const el = document.getElementById('maperr');
+    el.textContent = 'Map: ' + m;
+    el.style.display = 'block';
+  });
 
-/* The viewer's location, from the browser, drawn as a dot. The map is never
+  /* The viewer's location, from the browser, drawn as a dot. The map is never
    moved to it: the map is about the receiver's sky, and the viewer may be
    nowhere near it. Browsers only give a location to a secure page - HTTPS, or
    localhost - so over plain HTTP from another machine the HUD says why there
    is no dot instead of leaving it to be guessed. */
-let me = null;              // {lon, lat, acc} in degrees and metres
-function showMe(){
-  if(!mapReady || !me) return;
-  map.getSource('me').setData({type:'Feature', properties:{},
-    geometry:{type:'Point', coordinates:[me.lon, me.lat]}});
-  // Metres to pixels: at zoom z a 512 px tile spans the equator's length over
-  // 2^z, shrunk by cos(latitude). Exponential in zoom, so two stops suffice.
-  const px0 = me.acc * 512 / (40075016.686 * Math.cos(me.lat * Math.PI / 180));
-  map.setPaintProperty('me-accuracy', 'circle-radius',
-    me.acc > 100000 ? 0 : ['interpolate', ['exponential', 2], ['zoom'], 0, px0, 22, px0 * 2 ** 22]);
-}
-function locate(){
-  const say = t=>{ document.getElementById('n-me').textContent = t; };
-  if(!window.isSecureContext){ say('needs HTTPS'); return; }
-  if(!navigator.geolocation){ say('unavailable'); return; }
-  navigator.geolocation.watchPosition(pos=>{
-    const c = pos.coords;
-    me = {lon: c.longitude, lat: c.latitude, acc: c.accuracy};
-    say('±' + (c.accuracy < 1000 ? Math.round(c.accuracy) + ' m' : (c.accuracy / 1000).toFixed(1) + ' km'));
-    showMe();
-  }, err=>say(err.code === err.PERMISSION_DENIED ? 'not allowed' : 'unavailable'),
-  {enableHighAccuracy: false, maximumAge: 60000, timeout: 30000});
-}
-locate();
+  let me = null; // {lon, lat, acc} in degrees and metres
+  function showMe() {
+    if (!mapReady || !me) return;
+    map.getSource('me').setData({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Point', coordinates: [me.lon, me.lat] },
+    });
+    // Metres to pixels: at zoom z a 512 px tile spans the equator's length over
+    // 2^z, shrunk by cos(latitude). Exponential in zoom, so two stops suffice.
+    const px0 = (me.acc * 512) / (40075016.686 * Math.cos((me.lat * Math.PI) / 180));
+    map.setPaintProperty(
+      'me-accuracy',
+      'circle-radius',
+      me.acc > 100000
+        ? 0
+        : ['interpolate', ['exponential', 2], ['zoom'], 0, px0, 22, px0 * 2 ** 22],
+    );
+  }
+  function locate() {
+    const say = (t) => {
+      document.getElementById('n-me').textContent = t;
+    };
+    if (!window.isSecureContext) {
+      say('needs HTTPS');
+      return;
+    }
+    if (!navigator.geolocation) {
+      say('unavailable');
+      return;
+    }
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        const c = pos.coords;
+        me = { lon: c.longitude, lat: c.latitude, acc: c.accuracy };
+        say(
+          '±' +
+            (c.accuracy < 1000
+              ? Math.round(c.accuracy) + ' m'
+              : (c.accuracy / 1000).toFixed(1) + ' km'),
+        );
+        showMe();
+      },
+      (err) => say(err.code === err.PERMISSION_DENIED ? 'not allowed' : 'unavailable'),
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 30000 },
+    );
+  }
+  locate();
 
-// The feed is started here rather than from the map's load event: if WebGL is
-// unavailable the map never loads, and the counters going up are then the only
-// sign that the bridge is fine and only the rendering is not.
-startWS();
+  // The feed is started here rather than from the map's load event: if WebGL is
+  // unavailable the map never loads, and the counters going up are then the only
+  // sign that the bridge is fine and only the rendering is not.
+  startWS();
 
-// MapLibre's load event waits on the first tiles as well as the style, so a
-// renderer that cannot finish them leaves the page blank with nothing said.
-// Say so rather than show an empty canvas.
-setTimeout(()=>{
-  if(mapReady) return;
-  const el = document.getElementById('maperr');
-  el.textContent = 'Map did not finish loading — WebGL may be unavailable. '
-                 + 'The feed is unaffected; the counters show what is arriving.';
-  el.style.display = 'block';
-}, 12000);
+  // MapLibre's load event waits on the first tiles as well as the style, so a
+  // renderer that cannot finish them leaves the page blank with nothing said.
+  // Say so rather than show an empty canvas.
+  setTimeout(() => {
+    if (mapReady) return;
+    const el = document.getElementById('maperr');
+    el.textContent =
+      'Map did not finish loading — WebGL may be unavailable. ' +
+      'The feed is unaffected; the counters show what is arriving.';
+    el.style.display = 'block';
+  }, 12000);
 
-/* A plane drawn once into a canvas, pointed north so icon-rotate can take the
+  /* A plane drawn once into a canvas, pointed north so icon-rotate can take the
    aircraft's track directly. White with a dark keyline so it reads over both
    land and water. */
-function planeIcon(size){
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const x = c.getContext('2d'), s = size/24;
-  x.translate(size/2,size/2); x.scale(s,s); x.translate(-12,-12);
-  x.beginPath();
-  x.moveTo(12,2); x.lineTo(13.6,9.2); x.lineTo(22,13.4); x.lineTo(22,15.4);
-  x.lineTo(13.6,13.2); x.lineTo(13.1,19.4); x.lineTo(16,21.2); x.lineTo(16,22.4);
-  x.lineTo(12,21.4); x.lineTo(8,22.4); x.lineTo(8,21.2); x.lineTo(10.9,19.4);
-  x.lineTo(10.4,13.2); x.lineTo(2,15.4); x.lineTo(2,13.4); x.lineTo(10.4,9.2);
-  x.closePath();
-  x.fillStyle='#ffffff'; x.fill();
-  x.lineWidth=1.1; x.strokeStyle='#10141b'; x.lineJoin='round'; x.stroke();
-  return x.getImageData(0,0,size,size);
-}
+  function planeIcon(size) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const x = c.getContext('2d'),
+      s = size / 24;
+    x.translate(size / 2, size / 2);
+    x.scale(s, s);
+    x.translate(-12, -12);
+    x.beginPath();
+    x.moveTo(12, 2);
+    x.lineTo(13.6, 9.2);
+    x.lineTo(22, 13.4);
+    x.lineTo(22, 15.4);
+    x.lineTo(13.6, 13.2);
+    x.lineTo(13.1, 19.4);
+    x.lineTo(16, 21.2);
+    x.lineTo(16, 22.4);
+    x.lineTo(12, 21.4);
+    x.lineTo(8, 22.4);
+    x.lineTo(8, 21.2);
+    x.lineTo(10.9, 19.4);
+    x.lineTo(10.4, 13.2);
+    x.lineTo(2, 15.4);
+    x.lineTo(2, 13.4);
+    x.lineTo(10.4, 9.2);
+    x.closePath();
+    x.fillStyle = '#ffffff';
+    x.fill();
+    x.lineWidth = 1.1;
+    x.strokeStyle = '#10141b';
+    x.lineJoin = 'round';
+    x.stroke();
+    return x.getImageData(0, 0, size, size);
+  }
 
-const EMPTY = {type:'FeatureCollection',features:[]};
+  const EMPTY = { type: 'FeatureCollection', features: [] };
 
-/* OpenFreeMap's dark style is entirely neutral grey. Give it a night palette by
+  /* OpenFreeMap's dark style is entirely neutral grey. Give it a night palette by
    what each layer is - water a deep blue, woods and parks a dark green-teal,
    everything else a navy tint - while keeping every colour's OKLab lightness
    exactly where the style had it. Lightness is what the tracks' contrast rests
    on, so the ramp reads as well as it did on grey; only the hue moves. */
-const OK = {
-  lin: c=>(c /= 255) <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4,
-  gam: c=>Math.round(255 * Math.max(0, Math.min(1,
-             c <= .0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - .055))),
-  toLab([r, g, b]){
-    [r, g, b] = [r, g, b].map(OK.lin);
-    const l = Math.cbrt(.4122214708*r + .5363325363*g + .0514459929*b),
-          m = Math.cbrt(.2119034982*r + .6806995451*g + .1073969566*b),
-          s = Math.cbrt(.0883024619*r + .2817188376*g + .6299787005*b);
-    return [.2104542553*l + .7936177850*m - .0040720468*s,
-            1.9779984951*l - 2.4285922050*m + .4505937099*s,
-            .0259040371*l + .7827717662*m - .8086757660*s];
-  },
-  toRgb([L, a, b]){
-    const l = (L + .3963377774*a + .2158037573*b) ** 3,
-          m = (L - .1055613458*a - .0638541728*b) ** 3,
-          s = (L - .0894841775*a - 1.2914855480*b) ** 3;
-    return [4.0767416621*l - 3.3077115913*m + .2309699292*s,
-            -1.2684380046*l + 2.6097574011*m - .3413193965*s,
-            -.0041960863*l - .7034186147*m + 1.7076147010*s].map(OK.gam);
-  },
-  parse(v){
-    if(typeof v !== 'string') return null;
-    let m, t = v.replace(/\s+/g, '');
-    if(t[0] === '#'){
-      let h = t.slice(1); if(h.length === 3) h = h.replace(/./g, '$&$&');
-      return /^[0-9a-f]{6}$/i.test(h) ? [0, 2, 4].map(i=>parseInt(h.slice(i, i + 2), 16)).concat(1) : null;
-    }
-    if((m = t.match(/^rgba?\(([^)]+)\)$/))){ const p = m[1].split(',').map(Number); return [p[0], p[1], p[2], p[3] ?? 1]; }
-    if((m = t.match(/^hsla?\(([^)]+)\)$/))){
-      const [h, S, L, A] = m[1].split(',').map(parseFloat), s = S / 100, l = L / 100;
-      const k = n=>(n + h / 30) % 12, a = s * Math.min(l, 1 - l);
-      const f = n=>255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
-      return [f(0), f(8), f(4), A ?? 1];
-    }
-    return null;
-  },
-};
-function tint(v, hue, chroma){
-  if(Array.isArray(v)) return v.map(x=>tint(x, hue, chroma));
-  const c = OK.parse(v); if(!c) return v;
-  const [L] = OK.toLab(c), h = hue * Math.PI / 180;
-  const [r, g, b] = OK.toRgb([L, chroma * Math.cos(h), chroma * Math.sin(h)]);
-  return `rgba(${r},${g},${b},${c[3]})`;
-}
-let ground = [12, 12, 12];
-function nightPalette(){
-  for(const l of map.getStyle().layers){
-    const paint = l.paint || {};
-    for(const key of Object.keys(paint)){
-      if(!key.endsWith('-color') || key.endsWith('halo-color')) continue;
-      let hue = 255, chroma = .025;                                   // navy
-      if(/water/.test(l.id))              { hue = 245; chroma = .055; }  // deeper blue
-      else if(/wood|park/.test(l.id))     { hue = 165; chroma = .035; }  // green-teal
-      else if(/^place_/.test(l.id))       continue;                  // set below
-      else if(l.type === 'symbol')        { chroma = .02; }
-      map.setPaintProperty(l.id, key, tint(paint[key], hue, chroma));
-    }
+  const OK = {
+    lin: (c) => ((c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4),
+    gam: (c) =>
+      Math.round(
+        255 * Math.max(0, Math.min(1, c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)),
+      ),
+    toLab([r, g, b]) {
+      [r, g, b] = [r, g, b].map(OK.lin);
+      const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b),
+        m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b),
+        s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+      return [
+        0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+      ];
+    },
+    toRgb([L, a, b]) {
+      const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3,
+        m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+        s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+      return [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+      ].map(OK.gam);
+    },
+    parse(v) {
+      if (typeof v !== 'string') return null;
+      let m,
+        t = v.replace(/\s+/g, '');
+      if (t[0] === '#') {
+        let h = t.slice(1);
+        if (h.length === 3) h = h.replace(/./g, '$&$&');
+        return /^[0-9a-f]{6}$/i.test(h)
+          ? [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).concat(1)
+          : null;
+      }
+      if ((m = t.match(/^rgba?\(([^)]+)\)$/))) {
+        const p = m[1].split(',').map(Number);
+        return [p[0], p[1], p[2], p[3] ?? 1];
+      }
+      if ((m = t.match(/^hsla?\(([^)]+)\)$/))) {
+        const [h, S, L, A] = m[1].split(',').map(parseFloat),
+          s = S / 100,
+          l = L / 100;
+        const k = (n) => (n + h / 30) % 12,
+          a = s * Math.min(l, 1 - l);
+        const f = (n) => 255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
+        return [f(0), f(8), f(4), A ?? 1];
+      }
+      return null;
+    },
+  };
+  function tint(v, hue, chroma) {
+    if (Array.isArray(v)) return v.map((x) => tint(x, hue, chroma));
+    const c = OK.parse(v);
+    if (!c) return v;
+    const [L] = OK.toLab(c),
+      h = (hue * Math.PI) / 180;
+    const [r, g, b] = OK.toRgb([L, chroma * Math.cos(h), chroma * Math.sin(h)]);
+    return `rgba(${r},${g},${b},${c[3]})`;
   }
-  // Towns: a quiet steel blue, regular weight - clearly behind the aircraft,
-  // whose callsigns are white and bold. The style's own rgb(101,101,101) is
-  // too faint to orient by.
-  for(const l of map.getStyle().layers)
-    if(l.type === 'symbol' && l.id.startsWith('place_'))
-      map.setPaintProperty(l.id, 'text-color', '#7f8ea6');
-  const bg = map.getStyle().layers.find(l=>l.type === 'background');
-  ground = OK.parse(map.getPaintProperty(bg.id, 'background-color')).slice(0, 3);
-}
+  let ground = [12, 12, 12];
+  function nightPalette() {
+    for (const l of map.getStyle().layers) {
+      const paint = l.paint || {};
+      for (const key of Object.keys(paint)) {
+        if (!key.endsWith('-color') || key.endsWith('halo-color')) continue;
+        let hue = 255,
+          chroma = 0.025; // navy
+        if (/water/.test(l.id)) {
+          hue = 245;
+          chroma = 0.055;
+        } // deeper blue
+        else if (/wood|park/.test(l.id)) {
+          hue = 165;
+          chroma = 0.035;
+        } // green-teal
+        else if (/^place_/.test(l.id))
+          continue; // set below
+        else if (l.type === 'symbol') {
+          chroma = 0.02;
+        }
+        map.setPaintProperty(l.id, key, tint(paint[key], hue, chroma));
+      }
+    }
+    // Towns: a quiet steel blue, regular weight - clearly behind the aircraft,
+    // whose callsigns are white and bold. The style's own rgb(101,101,101) is
+    // too faint to orient by.
+    for (const l of map.getStyle().layers)
+      if (l.type === 'symbol' && l.id.startsWith('place_'))
+        map.setPaintProperty(l.id, 'text-color', '#7f8ea6');
+    const bg = map.getStyle().layers.find((l) => l.type === 'background');
+    ground = OK.parse(map.getPaintProperty(bg.id, 'background-color')).slice(0, 3);
+  }
 
-/* A colour laid over the ground in advance, for dimmed and fading tracks.
+  /* A colour laid over the ground in advance, for dimmed and fading tracks.
    Each leg of a track is its own feature, so a translucent line is drawn
    twice wherever two legs' round caps overlap, which shows as a bright bead at
    every position report. An opaque colour looks the same however many times
    it is drawn, so the track layers stay opaque. */
-function overGround(hex, alpha){
-  const c = OK.parse(hex);
-  return 'rgb(' + c.slice(0, 3).map((v, i)=>Math.round(alpha * v + (1 - alpha) * ground[i])).join(',') + ')';
-}
+  function overGround(hex, alpha) {
+    const c = OK.parse(hex);
+    return (
+      'rgb(' +
+      c
+        .slice(0, 3)
+        .map((v, i) => Math.round(alpha * v + (1 - alpha) * ground[i]))
+        .join(',') +
+      ')'
+    );
+  }
 
-map.on('load', ()=>{
-  map.addImage('plane', planeIcon(40), {pixelRatio:2});
+  map.on('load', () => {
+    map.addImage('plane', planeIcon(40), { pixelRatio: 2 });
 
-  nightPalette();
+    nightPalette();
 
-  // Every leg of a track is its own two-point feature, which is what lets the
-  // colour follow altitude along it. Tile simplification drops a feature that
-  // is shorter than its tolerance instead of shortening it, so tolerance is 0
-  // to keep short legs at low zoom.
-  map.addSource('tracks', {type:'geojson', data:EMPTY, tolerance:0});
-  map.addSource('planes', {type:'geojson', data:EMPTY});
-  map.addSource('me', {type:'geojson', data:EMPTY});
+    // Every leg of a track is its own two-point feature, which is what lets the
+    // colour follow altitude along it. Tile simplification drops a feature that
+    // is shorter than its tolerance instead of shortening it, so tolerance is 0
+    // to keep short legs at low zoom.
+    map.addSource('tracks', { type: 'geojson', data: EMPTY, tolerance: 0 });
+    map.addSource('planes', { type: 'geojson', data: EMPTY });
+    map.addSource('me', { type: 'geojson', data: EMPTY });
 
-  const colour = ['interpolate',['linear'],['coalesce',['get','alt'],0], ...RAMP];
-  const dimmed = ['interpolate',['linear'],['coalesce',['get','alt'],0],
-                  ...RAMP.map((v, i)=>i % 2 ? overGround(v, .35) : v)];
-  // Fading out: tracks with round caps are blended toward the ground colour
-  // instead of made translucent (see overGround).
-  const groundRgb = 'rgb(' + ground.join(',') + ')';
-  const fadeVal = ['coalesce', ['get', 'fade'], 1];
-  const fadeTo = c=>['interpolate', ['linear'], fadeVal, 0, groundRgb, 1, c];
+    const colour = ['interpolate', ['linear'], ['coalesce', ['get', 'alt'], 0], ...RAMP];
+    const dimmed = [
+      'interpolate',
+      ['linear'],
+      ['coalesce', ['get', 'alt'], 0],
+      ...RAMP.map((v, i) => (i % 2 ? overGround(v, 0.35) : v)),
+    ];
+    // Fading out: tracks with round caps are blended toward the ground colour
+    // instead of made translucent (see overGround).
+    const groundRgb = 'rgb(' + ground.join(',') + ')';
+    const fadeVal = ['coalesce', ['get', 'fade'], 1];
+    const fadeTo = (c) => ['interpolate', ['linear'], fadeVal, 0, groundRgb, 1, c];
 
-  // The selected track sits on an opaque band a few shades lighter than the
-  // ground, and every stop of the ramp is lighter again.
-  map.addLayer({id:'track-halo', type:'line', source:'tracks',
-    filter:['==',['get','sel'],true],
-    paint:{'line-color':fadeTo('#2c333e'),
-           'line-width':['interpolate',['linear'],['zoom'],5,7,12,16]},
-    layout:{'line-cap':'round','line-join':'round'}});
+    // The selected track sits on an opaque band a few shades lighter than the
+    // ground, and every stop of the ramp is lighter again.
+    map.addLayer({
+      id: 'track-halo',
+      type: 'line',
+      source: 'tracks',
+      filter: ['==', ['get', 'sel'], true],
+      paint: {
+        'line-color': fadeTo('#2c333e'),
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 7, 12, 16],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    });
 
-  // A faint blurred line in each track's colour; above ~0.2 opacity dense
-  // traffic turns into haze. The blur is wide enough to hide the beads where
-  // legs overlap.
-  map.addLayer({id:'track-glow', type:'line', source:'tracks',
-    filter:['all',['==',['get','gap'],false],['!=',['get','dim'],true]],
-    paint:{'line-color':colour,
-           'line-width':['interpolate',['linear'],['zoom'],5,5,12,11],
-           'line-blur':['interpolate',['linear'],['zoom'],5,3.5,12,8],
-           'line-opacity':['*', .18, fadeVal]},
-    layout:{'line-cap':'round','line-join':'round'}});
+    // A faint blurred line in each track's colour; above ~0.2 opacity dense
+    // traffic turns into haze. The blur is wide enough to hide the beads where
+    // legs overlap.
+    map.addLayer({
+      id: 'track-glow',
+      type: 'line',
+      source: 'tracks',
+      filter: ['all', ['==', ['get', 'gap'], false], ['!=', ['get', 'dim'], true]],
+      paint: {
+        'line-color': colour,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 12, 11],
+        'line-blur': ['interpolate', ['linear'], ['zoom'], 5, 3.5, 12, 8],
+        'line-opacity': ['*', 0.18, fadeVal],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    });
 
-  map.addLayer({id:'track-solid', type:'line', source:'tracks',
-    filter:['==',['get','gap'],false],
-    paint:{'line-color':fadeTo(['case',['==',['get','dim'],true],dimmed,colour]),
-           'line-width':['interpolate',['linear'],['zoom'],5,1.6,12,3.4]},
-    layout:{'line-cap':'round','line-join':'round'}});
+    map.addLayer({
+      id: 'track-solid',
+      type: 'line',
+      source: 'tracks',
+      filter: ['==', ['get', 'gap'], false],
+      paint: {
+        'line-color': fadeTo(['case', ['==', ['get', 'dim'], true], dimmed, colour]),
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.6, 12, 3.4],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    });
 
-  // Gaps use the same colour so altitude still reads, but dashed so the jump
-  // is obviously not a flown path.
-  map.addLayer({id:'track-gap', type:'line', source:'tracks',
-    filter:['==',['get','gap'],true],
-    paint:{'line-color':colour,'line-dasharray':[2,2.2],
-           'line-width':['interpolate',['linear'],['zoom'],5,1.4,12,2.6],
-           'line-opacity':['*', ['case',['==',['get','dim'],true],.3,.8], fadeVal]},
-    layout:{'line-cap':'butt','line-join':'round'}});
+    // Gaps use the same colour so altitude still reads, but dashed so the jump
+    // is obviously not a flown path.
+    map.addLayer({
+      id: 'track-gap',
+      type: 'line',
+      source: 'tracks',
+      filter: ['==', ['get', 'gap'], true],
+      paint: {
+        'line-color': colour,
+        'line-dasharray': [2, 2.2],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.4, 12, 2.6],
+        'line-opacity': ['*', ['case', ['==', ['get', 'dim'], true], 0.3, 0.8], fadeVal],
+      },
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+    });
 
-  // The viewer's own position: a blue dot, and a faint disc for how sure the
-  // browser is of it. Under the aircraft, so it never hides one. Blue is the
-  // one hue the altitude ramp does not use at full strength, and the white
-  // ring keeps the dot apart from the navy ground.
-  map.addLayer({id:'me-accuracy', type:'circle', source:'me',
-    paint:{'circle-radius':0,'circle-color':'#5aa9ff','circle-opacity':.10,
-           'circle-stroke-color':'#5aa9ff','circle-stroke-width':1,'circle-stroke-opacity':.35,
-           'circle-pitch-alignment':'map'}});
-  map.addLayer({id:'me-dot', type:'circle', source:'me',
-    paint:{'circle-radius':5.5,'circle-color':'#5aa9ff',
-           'circle-stroke-color':'#ffffff','circle-stroke-width':2}});
+    // The viewer's own position: a blue dot, and a faint disc for how sure the
+    // browser is of it. Under the aircraft, so it never hides one. Blue is the
+    // one hue the altitude ramp does not use at full strength, and the white
+    // ring keeps the dot apart from the navy ground.
+    map.addLayer({
+      id: 'me-accuracy',
+      type: 'circle',
+      source: 'me',
+      paint: {
+        'circle-radius': 0,
+        'circle-color': '#5aa9ff',
+        'circle-opacity': 0.1,
+        'circle-stroke-color': '#5aa9ff',
+        'circle-stroke-width': 1,
+        'circle-stroke-opacity': 0.35,
+        'circle-pitch-alignment': 'map',
+      },
+    });
+    map.addLayer({
+      id: 'me-dot',
+      type: 'circle',
+      source: 'me',
+      paint: {
+        'circle-radius': 5.5,
+        'circle-color': '#5aa9ff',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+      },
+    });
 
-  map.addLayer({id:'planes', type:'symbol', source:'planes',
-    layout:{'icon-image':'plane',
-            'icon-size':['interpolate',['linear'],['zoom'],5,.45,12,.72],
-            'icon-rotate':['coalesce',['get','trk'],0],
-            'icon-rotation-alignment':'map','icon-allow-overlap':true,
-            'text-field':['coalesce',['get','cs'],['get','icao']],
-            'text-font':['Noto Sans Bold'],'text-size':11.5,
-            'text-offset':[0,1.25],'text-anchor':'top','text-allow-overlap':false,
-            'text-optional':true},
-    paint:{'text-color':'#ffffff','text-halo-color':'#05080d','text-halo-width':1.6,
-           'icon-opacity':fadeVal,'text-opacity':fadeVal}});
+    map.addLayer({
+      id: 'planes',
+      type: 'symbol',
+      source: 'planes',
+      layout: {
+        'icon-image': 'plane',
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.45, 12, 0.72],
+        'icon-rotate': ['coalesce', ['get', 'trk'], 0],
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'text-field': ['coalesce', ['get', 'cs'], ['get', 'icao']],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': 11.5,
+        'text-offset': [0, 1.25],
+        'text-anchor': 'top',
+        'text-allow-overlap': false,
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#05080d',
+        'text-halo-width': 1.6,
+        'icon-opacity': fadeVal,
+        'text-opacity': fadeVal,
+      },
+    });
 
-  map.on('click','planes', e=>{ select(e.features[0].properties.icao); });
-  map.on('click', e=>{
-    if(map.queryRenderedFeatures(e.point,{layers:['planes']}).length===0) select(null);
+    map.on('click', 'planes', (e) => {
+      select(e.features[0].properties.icao);
+    });
+    map.on('click', (e) => {
+      if (map.queryRenderedFeatures(e.point, { layers: ['planes'] }).length === 0) select(null);
+    });
+    map.on('mouseenter', 'planes', () => (map.getCanvas().style.cursor = 'pointer'));
+    map.on('mouseleave', 'planes', () => (map.getCanvas().style.cursor = ''));
+
+    mapReady = true;
+    document.getElementById('n-map').textContent = 'ready';
+    render();
+    showMe();
   });
-  map.on('mouseenter','planes', ()=>map.getCanvas().style.cursor='pointer');
-  map.on('mouseleave','planes', ()=>map.getCanvas().style.cursor='');
 
-  mapReady = true;
-  document.getElementById('n-map').textContent = 'ready';
-  render();
-  showMe();
-});
+  function select(icao) {
+    selected = selected === icao ? null : icao;
+    if (popup) {
+      const p = popup;
+      popup = null;
+      p.remove();
+    }
+    if (selected && fleet.has(selected)) showPopup(selected);
+    render();
+  }
 
-function select(icao){
-  selected = (selected===icao) ? null : icao;
-  if(popup){ const p = popup; popup=null; p.remove(); }
-  if(selected && fleet.has(selected)) showPopup(selected);
-  render();
-}
+  /* A length of time, in seconds or in minutes and seconds: "42 s", "3 min 05 s". */
+  function howLong(secs) {
+    const s = Math.round(secs);
+    return s < 60
+      ? s + ' s'
+      : Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s';
+  }
 
-/* A length of time, in seconds or in minutes and seconds: "42 s", "3 min 05 s". */
-function howLong(secs){
-  const s = Math.round(secs);
-  return s < 60 ? s+' s' : Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s';
-}
+  function fmt(v, d, unit) {
+    return v === null || v === undefined
+      ? '—'
+      : v.toLocaleString(undefined, { maximumFractionDigits: d }) + (unit ? ' ' + unit : '');
+  }
 
-function fmt(v,d,unit){ return (v===null||v===undefined) ? '—'
-  : v.toLocaleString(undefined,{maximumFractionDigits:d}) + (unit?' '+unit:''); }
-
-/* Emitter categories (DO-260B 2.2.3.2.5.2), TC28 emergency states and ADS-B
+  /* Emitter categories (DO-260B 2.2.3.2.5.2), TC28 emergency states and ADS-B
    versions, as the popup names them. */
-const CATEGORY = {A1:'light', A2:'small', A3:'large', A4:'B757-class', A5:'heavy',
-  A6:'high performance', A7:'rotorcraft', B1:'glider', B2:'balloon', B3:'parachutist',
-  B4:'ultralight', B6:'drone', B7:'spacecraft', C1:'emergency vehicle',
-  C2:'service vehicle', C3:'obstacle', C4:'obstacle', C5:'obstacle'};
-const EMERGENCY = {1:'emergency', 2:'medical', 3:'minimum fuel', 4:'no radio',
-  5:'unlawful interference', 6:'downed aircraft'};
-const VERSION = {0:'DO-260', 1:'DO-260A', 2:'DO-260B'};
+  const CATEGORY = {
+    A1: 'light',
+    A2: 'small',
+    A3: 'large',
+    A4: 'B757-class',
+    A5: 'heavy',
+    A6: 'high performance',
+    A7: 'rotorcraft',
+    B1: 'glider',
+    B2: 'balloon',
+    B3: 'parachutist',
+    B4: 'ultralight',
+    B6: 'drone',
+    B7: 'spacecraft',
+    C1: 'emergency vehicle',
+    C2: 'service vehicle',
+    C3: 'obstacle',
+    C4: 'obstacle',
+    C5: 'obstacle',
+  };
+  const EMERGENCY = {
+    1: 'emergency',
+    2: 'medical',
+    3: 'minimum fuel',
+    4: 'no radio',
+    5: 'unlawful interference',
+    6: 'downed aircraft',
+  };
+  const VERSION = { 0: 'DO-260', 1: 'DO-260A', 2: 'DO-260B' };
 
-/* What the aircraft itself never says: registration, type, today's route and
+  /* What the aircraft itself never says: registration, type, today's route and
    a photograph. The bridge answers these, from its own cache on disk, and
    asks hexdb.io only for what it has not got - so a viewer talks to nothing
    but the bridge, and hexdb is asked once for an airframe rather than once
    per viewer. Looked up only for an aircraft whose popup is opened; the maps
    below keep the answers for this page, the bridge keeps them for everyone. */
-const API = 'api', PHOTO = 'photo', LOGO = 'logo';
-const RETRY_MS = 10 * 60 * 1000;        // how long a failed lookup is left alone
-const planeInfo = new Map();            // icao -> {reg, type, ...} | 'none'
-const routeInfo = new Map();            // callsign -> {route, seen} | 'none'
-const fieldInfo = new Map();            // airport code -> {name} | 'none'
-const photoOf = new Map();              // icao -> 'pending' | true | 'none'
-const logoOf = new Map();               // airline code -> 'pending' | true | 'none'
-const asking = new Set();
+  const API = 'api',
+    PHOTO = 'photo',
+    LOGO = 'logo';
+  const RETRY_MS = 10 * 60 * 1000; // how long a failed lookup is left alone
+  const planeInfo = new Map(); // icao -> {reg, type, ...} | 'none'
+  const routeInfo = new Map(); // callsign -> {route, seen} | 'none'
+  const fieldInfo = new Map(); // airport code -> {name} | 'none'
+  const photoOf = new Map(); // icao -> 'pending' | true | 'none'
+  const logoOf = new Map(); // airline code -> 'pending' | true | 'none'
+  const asking = new Set();
 
-/* Record a failed lookup as 'none' for RETRY_MS, so it is not asked again on
+  /* Record a failed lookup as 'none' for RETRY_MS, so it is not asked again on
    every redraw but is asked again later. */
-function failed(cache, key){
-  cache.set(key, 'none');
-  setTimeout(()=>cache.delete(key), RETRY_MS);
-}
-
-async function ask(cache, key, url, keep){
-  if(cache.has(key) || asking.has(key)) return;
-  asking.add(key);
-  try{
-    const r = await fetch(url);
-    // 404 means there is no entry, which stays true. Anything else, such as
-    // 503 when hexdb cannot be reached, is asked again later.
-    if(r.ok) cache.set(key, keep(await r.json()));
-    else if(r.status === 404) cache.set(key, 'none');
-    else failed(cache, key);
-  }catch(e){
-    failed(cache, key);
-  }finally{
-    asking.delete(key);
-    refreshPopup(key);
-  }
-}
-
-/* Fill in what is cached, and ask for what is not. Called when a popup opens. */
-function lookup(icao, a){
-  // A bridge started without lookups answers none of these, and says so in
-  // every update: asking anyway would be a round trip per popup for a 404.
-  if(!lookups) return;
-  ask(planeInfo, icao, API + '/aircraft/' + icao, j=>({
-    reg: j.Registration, type: j.Type, code: j.ICAOTypeCode, make: j.Manufacturer,
-    owner: j.RegisteredOwners, flag: j.OperatorFlagCode }));
-  const cs = (a.meta.cs || '').trim();
-  if(cs) ask(routeInfo, cs, API + '/route/' + encodeURIComponent(cs),
-             j=>({route: j.route, seen: j.updatetime}));
-  a.info = planeInfo.get(icao);
-  a.route = cs ? routeInfo.get(cs) : undefined;
-
-  // A photograph of this airframe, from the bridge's own store. Asked for by
-  // loading it. An image load does not report the status, so any failure,
-  // including a 404 for an aircraft without one, is asked again after RETRY_MS.
-  if(!photoOf.has(icao)){
-    photoOf.set(icao, 'pending');
-    const img = new Image();
-    img.onload  = ()=>{ photoOf.set(icao, true);   refreshPopup(icao); };
-    img.onerror = ()=>{ failed(photoOf, icao); };
-    img.src = PHOTO + '/' + icao;
-  }
-  a.photo = photoOf.get(icao) === true ? PHOTO + '/' + icao : null;
-
-  // The airports at either end, so the route can be read as names.
-  const r = a.route && a.route !== 'none' ? a.route.route : null;
-  for(const code of (r || '').split('-').filter(Boolean)){
-    ask(fieldInfo, code, API + '/airport/' + encodeURIComponent(code), j=>({name: j.airport}));
+  function failed(cache, key) {
+    cache.set(key, 'none');
+    setTimeout(() => cache.delete(key), RETRY_MS);
   }
 
-  // The airline's logo, from this bridge rather than from anywhere else, and
-  // only when it was started with a directory of them.
-  const flag = a.info && a.info !== 'none' ? a.info.flag : null;
-  if(logos && flag && !logoOf.has(flag)){
-    logoOf.set(flag, 'pending');
-    const img = new Image();
-    img.onload  = ()=>{ logoOf.set(flag, true);   refreshPopup(flag); };
-    img.onerror = ()=>{ failed(logoOf, flag); };
-    img.src = LOGO + '/' + encodeURIComponent(flag);
+  async function ask(cache, key, url, keep) {
+    if (cache.has(key) || asking.has(key)) return;
+    asking.add(key);
+    try {
+      const r = await fetch(url);
+      // 404 means there is no entry, which stays true. Anything else, such as
+      // 503 when hexdb cannot be reached, is asked again later.
+      if (r.ok) cache.set(key, keep(await r.json()));
+      else if (r.status === 404) cache.set(key, 'none');
+      else failed(cache, key);
+    } catch (e) {
+      failed(cache, key);
+    } finally {
+      asking.delete(key);
+      refreshPopup(key);
+    }
   }
-  a.logo = flag && logoOf.get(flag) === true ? LOGO + '/' + encodeURIComponent(flag) : null;
-}
 
-/* Redraw the open popup once something it was waiting on has landed. */
-function refreshPopup(key){
-  if(!selected) return;
-  const a = fleet.get(selected);
-  if(!a) return;
-  const cs = (a.meta.cs || '').trim();
-  const rt = a.route && a.route !== 'none' ? (a.route.route || '') : '';
-  const fl = a.info && a.info !== 'none' ? a.info.flag : null;
-  if(key !== selected && key !== cs && key !== fl && !rt.includes(key)) return;
-  updatePopup();
-}
+  /* Fill in what is cached, and ask for what is not. Called when a popup opens. */
+  function lookup(icao, a) {
+    // A bridge started without lookups answers none of these, and says so in
+    // every update: asking anyway would be a round trip per popup for a 404.
+    if (!lookups) return;
+    ask(planeInfo, icao, API + '/aircraft/' + icao, (j) => ({
+      reg: j.Registration,
+      type: j.Type,
+      code: j.ICAOTypeCode,
+      make: j.Manufacturer,
+      owner: j.RegisteredOwners,
+      flag: j.OperatorFlagCode,
+    }));
+    const cs = (a.meta.cs || '').trim();
+    if (cs)
+      ask(routeInfo, cs, API + '/route/' + encodeURIComponent(cs), (j) => ({
+        route: j.route,
+        seen: j.updatetime,
+      }));
+    a.info = planeInfo.get(icao);
+    a.route = cs ? routeInfo.get(cs) : undefined;
 
-/* An airport as the popup names it: "Frankfurt (EDDF)". The code already says
+    // A photograph of this airframe, from the bridge's own store. Asked for by
+    // loading it. An image load does not report the status, so any failure,
+    // including a 404 for an aircraft without one, is asked again after RETRY_MS.
+    if (!photoOf.has(icao)) {
+      photoOf.set(icao, 'pending');
+      const img = new Image();
+      img.onload = () => {
+        photoOf.set(icao, true);
+        refreshPopup(icao);
+      };
+      img.onerror = () => {
+        failed(photoOf, icao);
+      };
+      img.src = PHOTO + '/' + icao;
+    }
+    a.photo = photoOf.get(icao) === true ? PHOTO + '/' + icao : null;
+
+    // The airports at either end, so the route can be read as names.
+    const r = a.route && a.route !== 'none' ? a.route.route : null;
+    for (const code of (r || '').split('-').filter(Boolean)) {
+      ask(fieldInfo, code, API + '/airport/' + encodeURIComponent(code), (j) => ({
+        name: j.airport,
+      }));
+    }
+
+    // The airline's logo, from this bridge rather than from anywhere else, and
+    // only when it was started with a directory of them.
+    const flag = a.info && a.info !== 'none' ? a.info.flag : null;
+    if (logos && flag && !logoOf.has(flag)) {
+      logoOf.set(flag, 'pending');
+      const img = new Image();
+      img.onload = () => {
+        logoOf.set(flag, true);
+        refreshPopup(flag);
+      };
+      img.onerror = () => {
+        failed(logoOf, flag);
+      };
+      img.src = LOGO + '/' + encodeURIComponent(flag);
+    }
+    a.logo = flag && logoOf.get(flag) === true ? LOGO + '/' + encodeURIComponent(flag) : null;
+  }
+
+  /* Redraw the open popup once something it was waiting on has landed. */
+  function refreshPopup(key) {
+    if (!selected) return;
+    const a = fleet.get(selected);
+    if (!a) return;
+    const cs = (a.meta.cs || '').trim();
+    const rt = a.route && a.route !== 'none' ? a.route.route || '' : '';
+    const fl = a.info && a.info !== 'none' ? a.info.flag : null;
+    if (key !== selected && key !== cs && key !== fl && !rt.includes(key)) return;
+    updatePopup();
+  }
+
+  /* An airport as the popup names it: "Frankfurt (EDDF)". The code already says
    which airport it is, so the words that repeat that ("Airport",
    "International", and the alternative name some fields carry in brackets)
    are dropped, and what is left is cut to fit.
    "Hong Kong International Airport (Chek Lap Kok Airport)" becomes
    "Hong Kong (VHHH)", with the full name on hover. */
-const FIELD_CHARS = 19;
-function fieldName(code){
-  const f = fieldInfo.get(code);
-  const full = f && f !== 'none' ? f.name : null;
-  if(!full) return {text: code, full: null};
-  let name = full.replace(/\s*\([^)]*\)\s*$/, '')          // "(Chek Lap Kok Airport)"
-                 .replace(/\s+Airport$/i, '')                // "... Airport"
-                 .replace(/\s*\bInternational\b\s*/i, ' ') // says nothing a code does not
-                 .replace(/\s*\bIntl\.?\s*/i, ' ')
-                 .trim();
-  if(name.length > FIELD_CHARS) name = name.slice(0, FIELD_CHARS).trimEnd() + '…';
-  return {text: name + ' (' + code + ')', full: full + ' (' + code + ')'};
-}
+  const FIELD_CHARS = 19;
+  function fieldName(code) {
+    const f = fieldInfo.get(code);
+    const full = f && f !== 'none' ? f.name : null;
+    if (!full) return { text: code, full: null };
+    let name = full
+      .replace(/\s*\([^)]*\)\s*$/, '') // "(Chek Lap Kok Airport)"
+      .replace(/\s+Airport$/i, '') // "... Airport"
+      .replace(/\s*\bInternational\b\s*/i, ' ') // says nothing a code does not
+      .replace(/\s*\bIntl\.?\s*/i, ' ')
+      .trim();
+    if (name.length > FIELD_CHARS) name = name.slice(0, FIELD_CHARS).trimEnd() + '…';
+    return { text: name + ' (' + code + ')', full: full + ' (' + code + ')' };
+  }
 
-/* How old the route record is: confirmed lately, a few weeks ago, or longer.
+  /* How old the route record is: confirmed lately, a few weeks ago, or longer.
    The shade carries the degree; the text states the date and, past a
    fortnight, that the route may no longer be current. */
-function routeAge(seen){
-  const stale = 'route information might be outdated';
-  if(!seen) return {cls:'r-old', title:'route last confirmed: date unknown; ' + stale};
-  const days = (Date.now()/1000 - seen) / 86400;
-  const when = new Date(seen * 1000).toISOString().slice(0, 10);
-  if(days < 14) return {cls:'r-new', title:'route last confirmed ' + when};
-  if(days < 60) return {cls:'r-old', title:'route last confirmed ' + when + '; ' + stale};
-  return {cls:'r-stale', title:'route last confirmed ' + when + '; ' + stale};
-}
+  function routeAge(seen) {
+    const stale = 'route information might be outdated';
+    if (!seen) return { cls: 'r-old', title: 'route last confirmed: date unknown; ' + stale };
+    const days = (Date.now() / 1000 - seen) / 86400;
+    const when = new Date(seen * 1000).toISOString().slice(0, 10);
+    if (days < 14) return { cls: 'r-new', title: 'route last confirmed ' + when };
+    if (days < 60) return { cls: 'r-old', title: 'route last confirmed ' + when + '; ' + stale };
+    return { cls: 'r-stale', title: 'route last confirmed ' + when + '; ' + stale };
+  }
 
-/* "EPWA-LFPG" as the popup shows it: a row for where it came from and one for
+  /* "EPWA-LFPG" as the popup shows it: a row for where it came from and one for
    where it is going, because one line of two airport names is wider than
    everything else in the popup. A route with stops between them gets a "via"
    row; anything that is not a list of codes is passed through as it came. */
-function routeRows(r, age){
-  const parts = (r || '').split('-').filter(Boolean);
-  // The hover text carries the airport's full name and how old the route is,
-  // since a cell has only one title to give.
-  const shade = f=>'<span class="'+age.cls+'" title="'+
-        esc([f.full || f.text, age.title].join(' — '))+'">'+esc(f.text)+'</span>';
-  if(parts.length < 2) return r ? [['route', '<span class="'+age.cls+'" title="'+esc(age.title)+'">'+esc(r)+'</span>']] : [];
-  const rows = [['from', shade(fieldName(parts[0]))]];
-  if(parts.length > 2){
-    const mid = parts.slice(1, -1).map(fieldName);
-    rows.push(['via', '<span class="'+age.cls+'" title="'+esc(mid.map(f=>f.full||f.text).join(', '))+'">'+
-                      esc(mid.map(f=>f.text).join(', '))+'</span>']);
+  function routeRows(r, age) {
+    const parts = (r || '').split('-').filter(Boolean);
+    // The hover text carries the airport's full name and how old the route is,
+    // since a cell has only one title to give.
+    const shade = (f) =>
+      '<span class="' +
+      age.cls +
+      '" title="' +
+      esc([f.full || f.text, age.title].join(' — ')) +
+      '">' +
+      esc(f.text) +
+      '</span>';
+    if (parts.length < 2)
+      return r
+        ? [
+            [
+              'route',
+              '<span class="' + age.cls + '" title="' + esc(age.title) + '">' + esc(r) + '</span>',
+            ],
+          ]
+        : [];
+    const rows = [['from', shade(fieldName(parts[0]))]];
+    if (parts.length > 2) {
+      const mid = parts.slice(1, -1).map(fieldName);
+      rows.push([
+        'via',
+        '<span class="' +
+          age.cls +
+          '" title="' +
+          esc(mid.map((f) => f.full || f.text).join(', ')) +
+          '">' +
+          esc(mid.map((f) => f.text).join(', ')) +
+          '</span>',
+      ]);
+    }
+    rows.push(['to', shade(fieldName(parts[parts.length - 1]))]);
+    return rows;
   }
-  rows.push(['to', shade(fieldName(parts[parts.length - 1]))]);
-  return rows;
-}
 
-/* Anything that goes into an attribute or a cell as text. */
-function esc(v){
-  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+  /* Anything that goes into an attribute or a cell as text. */
+  function esc(v) {
+    return String(v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
 
-/* The popup's content and where it belongs. Popup content is built
+  /* The popup's content and where it belongs. Popup content is built
    separately so the popup can be updated in place instead of recreated. */
-function popupHTML(icao){
-  const a = fleet.get(icao); if(!a) return null;
-  const m = a.meta, last = a.pts[a.pts.length-1];
-  if(!last) return null;
-  const span = a.pts.length>1 ? a.pts[a.pts.length-1][0]-a.pts[0][0] : 0;
-  const c = Countries.lookup(parseInt(icao, 16));
-  lookup(icao, a);
-  const info = a.info === 'none' ? null : a.info;
-  const route = a.route === 'none' ? null : a.route;
-  const aircraft = info && [info.make, info.type].filter(Boolean).join(' ');
-  // The ICAO type code is worth showing beside the name - B38M for a 737MAX 8
-  // - but not when the name already contains it, as "A320 214SL" does.
-  const bare = t=>(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const code = info && info.code && !bare(info.type).includes(bare(info.code)) ? info.code : null;
-  const x = m.x, t = x.target;
-  const cat = x.category ? x.category + (CATEGORY[x.category] ? ' · '+CATEGORY[x.category] : '') : null;
-  const gnss = x.gnss_alt ?? (m.alt!=null && x.geo_minus_baro!=null ? m.alt + x.geo_minus_baro : null);
-  const emerg = x.emergency ? EMERGENCY[x.emergency] || 'emergency' : null;
-  const rows = [
-    ['country',    c ? esc(c.name) + (c.military ? ' (mil)' : '') : 'unallocated'],
-    aircraft && ['aircraft', '<span title="'+esc(aircraft)+'">'+esc(aircraft)+'</span>' +
-                             (code ? ' <span class="dim">'+esc(code)+'</span>' : '')],
-    info && info.reg && ['registration', esc(info.reg)],
-    info && info.owner && ['operator', '<span title="'+esc(info.owner)+'">'+esc(info.owner)+'</span>'],
-    ...(route ? routeRows(route.route, routeAge(route.seen)) : []),
-    cat && ['category', cat],
-    ['altitude',   fmt(m.alt,0,'ft')],
-    gnss!=null && ['GNSS height', fmt(gnss,0,'ft')],
-    ['ground speed', fmt(m.gs,0,'kt')],
-    x.ias!=null && ['IAS', fmt(x.ias,0,'kt')],
-    x.tas!=null && ['TAS', fmt(x.tas,0,'kt')],
-    ['track',      fmt(m.trk,0,'°')],
-    x.mag_heading!=null && ['heading', fmt(x.mag_heading,0,'° mag')],
-    ['vertical rate', m.vr==null?'—':(m.vr>0?'+':'')+fmt(m.vr,0,'ft/min')],
-    ['squawk',     esc(m.sq||'—') + (emerg ? ' <span class="emerg">'+emerg+'</span>' : '')],
-    ['on ground',  m.gnd?'yes':'no'],
-    ['last seen',  fmt(m.age,0,'s ago')],
-    // The 'track' row is the ground-track angle; this row is the drawn trail.
-    ['trail',      a.pts.length+' points / '+howLong(span)],
-  ];
-  if(t){
-    const set = [
-      t.alt!=null && ['selected alt', fmt(t.alt,0,'ft') + (t.alt_source==='FMS' ? ' FMS' : '')],
-      t.heading!=null && ['selected hdg', fmt(t.heading,0,'°')],
-      t.qnh!=null && ['QNH', fmt(t.qnh,1,'hPa')],
-      t.modes && ['autopilot', t.modes.length ? t.modes.map(n=>'<span class="mode">'+n+'</span>').join('') : 'off'],
-      ['TCAS', t.tcas ? 'operational' : 'off'],
-    ].filter(Boolean);
-    if(set.length){ set[0].sep = true; rows.push(...set); }
+  function popupHTML(icao) {
+    const a = fleet.get(icao);
+    if (!a) return null;
+    const m = a.meta,
+      last = a.pts[a.pts.length - 1];
+    if (!last) return null;
+    const span = a.pts.length > 1 ? a.pts[a.pts.length - 1][0] - a.pts[0][0] : 0;
+    const c = Countries.lookup(parseInt(icao, 16));
+    lookup(icao, a);
+    const info = a.info === 'none' ? null : a.info;
+    const route = a.route === 'none' ? null : a.route;
+    const aircraft = info && [info.make, info.type].filter(Boolean).join(' ');
+    // The ICAO type code is worth showing beside the name - B38M for a 737MAX 8
+    // - but not when the name already contains it, as "A320 214SL" does.
+    const bare = (t) => (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = info && info.code && !bare(info.type).includes(bare(info.code)) ? info.code : null;
+    const x = m.x,
+      t = x.target;
+    const cat = x.category
+      ? x.category + (CATEGORY[x.category] ? ' · ' + CATEGORY[x.category] : '')
+      : null;
+    const gnss =
+      x.gnss_alt ?? (m.alt != null && x.geo_minus_baro != null ? m.alt + x.geo_minus_baro : null);
+    const emerg = x.emergency ? EMERGENCY[x.emergency] || 'emergency' : null;
+    const rows = [
+      ['country', c ? esc(c.name) + (c.military ? ' (mil)' : '') : 'unallocated'],
+      aircraft && [
+        'aircraft',
+        '<span title="' +
+          esc(aircraft) +
+          '">' +
+          esc(aircraft) +
+          '</span>' +
+          (code ? ' <span class="dim">' + esc(code) + '</span>' : ''),
+      ],
+      info && info.reg && ['registration', esc(info.reg)],
+      info &&
+        info.owner && [
+          'operator',
+          '<span title="' + esc(info.owner) + '">' + esc(info.owner) + '</span>',
+        ],
+      ...(route ? routeRows(route.route, routeAge(route.seen)) : []),
+      cat && ['category', cat],
+      ['altitude', fmt(m.alt, 0, 'ft')],
+      gnss != null && ['GNSS height', fmt(gnss, 0, 'ft')],
+      ['ground speed', fmt(m.gs, 0, 'kt')],
+      x.ias != null && ['IAS', fmt(x.ias, 0, 'kt')],
+      x.tas != null && ['TAS', fmt(x.tas, 0, 'kt')],
+      ['track', fmt(m.trk, 0, '°')],
+      x.mag_heading != null && ['heading', fmt(x.mag_heading, 0, '° mag')],
+      ['vertical rate', m.vr == null ? '—' : (m.vr > 0 ? '+' : '') + fmt(m.vr, 0, 'ft/min')],
+      ['squawk', esc(m.sq || '—') + (emerg ? ' <span class="emerg">' + emerg + '</span>' : '')],
+      ['on ground', m.gnd ? 'yes' : 'no'],
+      ['last seen', fmt(m.age, 0, 's ago')],
+      // The 'track' row is the ground-track angle; this row is the drawn trail.
+      ['trail', a.pts.length + ' points / ' + howLong(span)],
+    ];
+    if (t) {
+      const set = [
+        t.alt != null && [
+          'selected alt',
+          fmt(t.alt, 0, 'ft') + (t.alt_source === 'FMS' ? ' FMS' : ''),
+        ],
+        t.heading != null && ['selected hdg', fmt(t.heading, 0, '°')],
+        t.qnh != null && ['QNH', fmt(t.qnh, 1, 'hPa')],
+        t.modes && [
+          'autopilot',
+          t.modes.length
+            ? t.modes.map((n) => '<span class="mode">' + n + '</span>').join('')
+            : 'off',
+        ],
+        ['TCAS', t.tcas ? 'operational' : 'off'],
+      ].filter(Boolean);
+      if (set.length) {
+        set[0].sep = true;
+        rows.push(...set);
+      }
+    }
+    if (x.version != null)
+      rows.push([
+        'ADS-B',
+        'v' + x.version + (VERSION[x.version] ? ' · ' + VERSION[x.version] : ''),
+      ]);
+    return {
+      at: [last[1], last[2]],
+      head:
+        (a.photo ? '<img class="shot" src="' + a.photo + '" alt="">' : '') +
+        '<h2>' +
+        (a.logo ? '<img class="logo" src="' + a.logo + '" alt="">' : '') +
+        (c && c.iso
+          ? '<span class="flag" title="' + esc(c.name) + '">' + Countries.flag(c.iso) + '</span>'
+          : '') +
+        esc(m.cs || '—') +
+        '<span>' +
+        icao +
+        '</span></h2>',
+      rows: rows
+        .filter(Boolean)
+        .map(
+          (r) =>
+            '<tr' +
+            (r.sep ? ' class="sep"' : '') +
+            '><td>' +
+            r[0] +
+            '</td><td>' +
+            r[1] +
+            '</td></tr>',
+        )
+        .join(''),
+    };
   }
-  if(x.version!=null) rows.push(['ADS-B', 'v'+x.version+(VERSION[x.version] ? ' · '+VERSION[x.version] : '')]);
-  return {
-    at: [last[1], last[2]],
-    head: (a.photo ? '<img class="shot" src="'+a.photo+'" alt="">' : '')+
-      '<h2>'+(a.logo ? '<img class="logo" src="'+a.logo+'" alt="">' : '')+
-      (c && c.iso ? '<span class="flag" title="'+esc(c.name)+'">'+
-      Countries.flag(c.iso)+'</span>' : '')+esc(m.cs||'—')+'<span>'+icao+'</span></h2>',
-    rows: rows.filter(Boolean).map(r=>'<tr'+(r.sep?' class="sep"':'')+'><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>').join(''),
-  };
-}
 
-/* How big the panel came out last time, so the next one can be placed before
+  /* How big the panel came out last time, so the next one can be placed before
    it is drawn. It varies with what is known about the aircraft, and the first
    one opened has nothing to go on. */
-let popupSize = {w: 294, h: 420};
+  let popupSize = { w: 294, h: 420 };
 
-/* How far the panel sits from the icon before any sliding. */
-const OFFSET = [10, 10];
+  /* How far the panel sits from the icon before any sliding. */
+  const OFFSET = [10, 10];
 
-/* Which corner of the panel sits at the icon: the one that leaves the panel on
+  /* Which corner of the panel sits at the icon: the one that leaves the panel on
    screen. It hangs down and to the right where there is room, and the other
    way where there is not. */
-function corner(at, size){
-  const p = map.project(at), box = map.getCanvas();
-  return (p.y + size.h + 24 > box.clientHeight && p.y - size.h > 0 ? 'bottom' : 'top') +
-         (p.x + size.w + 24 > box.clientWidth && p.x - size.w > 0 ? '-right' : '-left');
-}
+  function corner(at, size) {
+    const p = map.project(at),
+      box = map.getCanvas();
+    return (
+      (p.y + size.h + 24 > box.clientHeight && p.y - size.h > 0 ? 'bottom' : 'top') +
+      (p.x + size.w + 24 > box.clientWidth && p.x - size.w > 0 ? '-right' : '-left')
+    );
+  }
 
-/* A panel 294px wide often does not fit beside an aircraft on a phone screen,
+  /* A panel 294px wide often does not fit beside an aircraft on a phone screen,
    and it neither scrolls nor moves the map. So where it would hang over an
    edge it slides back along that edge: still beside the aircraft, no longer
    exactly at it. */
-function slideIntoView(p){
-  const el = p.getElement() && p.getElement().querySelector('.maplibregl-popup-content');
-  if(!el) return;
-  const r = el.getBoundingClientRect(), box = map.getCanvas().getBoundingClientRect();
-  const dx = Math.max(0, r.right + 6 - box.right) - Math.max(0, box.left + 6 - r.left);
-  const dy = Math.max(0, r.bottom + 6 - box.bottom) - Math.max(0, box.top + 6 - r.top);
-  if(dx || dy) p.setOffset([OFFSET[0] - dx, OFFSET[1] - dy]);
-}
+  function slideIntoView(p) {
+    const el = p.getElement() && p.getElement().querySelector('.maplibregl-popup-content');
+    if (!el) return;
+    const r = el.getBoundingClientRect(),
+      box = map.getCanvas().getBoundingClientRect();
+    const dx = Math.max(0, r.right + 6 - box.right) - Math.max(0, box.left + 6 - r.left);
+    const dy = Math.max(0, r.bottom + 6 - box.bottom) - Math.max(0, box.top + 6 - r.top);
+    if (dx || dy) p.setOffset([OFFSET[0] - dx, OFFSET[1] - dy]);
+  }
 
-/* Open a popup for `icao` with the given corner at the icon, and make it the
+  /* Open a popup for `icao` with the given corner at the icon, and make it the
    live one.
 
    Only a close the viewer asked for lets go of the aircraft. Everything that
    replaces or removes the popup itself (showPopup, select() and apply()) sets
    `popup` to null before removing it, so the close handler sees that it is no
    longer the live one and keeps the selection. */
-function openPopup(icao, v, anchor){
-  const p = new maplibregl.Popup({closeOnClick:false, offset:OFFSET, maxWidth:'none', anchor})
-    .setLngLat(v.at).setHTML('<div class="pop">'+v.head+'<table>'+v.rows+'</table></div>').addTo(map);
-  p.shownHead = v.head;
-  p.shownRows = v.rows;
-  popup = p;
-  p.on('close', ()=>{
-    if(popup!==p) return;
-    popup = null;
-    if(selected===icao){ selected=null; render(); }
-  });
-  return p;
-}
-
-function showPopup(icao){
-  const v = popupHTML(icao); if(!v) return;
-  // It hangs off the aircraft: a corner of the panel sits at the icon and the
-  // panel grows away from it, down and to the right where there is room and
-  // the other way where there is not. The corner is chosen when the popup
-  // opens and then left alone. Left to pick for itself, MapLibre centres the
-  // popup on the point and picks again as the content grows, which moves it
-  // sideways while it is being read.
-  let p = openPopup(icao, v, corner(v.at, popupSize));
-  // Once it has been drawn, remember its size for the next one, and put it on
-  // the other side if this one did not fit after all.
-  const el = p.getElement() && p.getElement().querySelector('.maplibregl-popup-content');
-  if(!el) return;
-  const r = el.getBoundingClientRect();
-  popupSize = {w: Math.round(r.width), h: Math.round(r.height)};
-  const want = corner(v.at, popupSize);
-  if(want !== p.options.anchor){
-    popup = null; p.remove();
-    p = openPopup(icao, v, want);
+  function openPopup(icao, v, anchor) {
+    const p = new maplibregl.Popup({
+      closeOnClick: false,
+      offset: OFFSET,
+      maxWidth: 'none',
+      anchor,
+    })
+      .setLngLat(v.at)
+      .setHTML('<div class="pop">' + v.head + '<table>' + v.rows + '</table></div>')
+      .addTo(map);
+    p.shownHead = v.head;
+    p.shownRows = v.rows;
+    popup = p;
+    p.on('close', () => {
+      if (popup !== p) return;
+      popup = null;
+      if (selected === icao) {
+        selected = null;
+        render();
+      }
+    });
+    return p;
   }
-  slideIntoView(p);
-}
 
-/* Keep the open popup current: move it to the aircraft's latest point, and
+  function showPopup(icao) {
+    const v = popupHTML(icao);
+    if (!v) return;
+    // It hangs off the aircraft: a corner of the panel sits at the icon and the
+    // panel grows away from it, down and to the right where there is room and
+    // the other way where there is not. The corner is chosen when the popup
+    // opens and then left alone. Left to pick for itself, MapLibre centres the
+    // popup on the point and picks again as the content grows, which moves it
+    // sideways while it is being read.
+    let p = openPopup(icao, v, corner(v.at, popupSize));
+    // Once it has been drawn, remember its size for the next one, and put it on
+    // the other side if this one did not fit after all.
+    const el = p.getElement() && p.getElement().querySelector('.maplibregl-popup-content');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    popupSize = { w: Math.round(r.width), h: Math.round(r.height) };
+    const want = corner(v.at, popupSize);
+    if (want !== p.options.anchor) {
+      popup = null;
+      p.remove();
+      p = openPopup(icao, v, want);
+    }
+    slideIntoView(p);
+  }
+
+  /* Keep the open popup current: move it to the aircraft's latest point, and
    rewrite only the part that changed. The figures change every second. The
    popup is updated in place instead of recreated, and the rows are their own
    element so that a change to them does not reload the photograph. */
-function updatePopup(){
-  if(!selected || !popup) return;
-  const v = popupHTML(selected);
-  if(!v) return;
-  const el = popup.getElement();
-  const pop = el && el.querySelector('.pop');
-  if(!pop) return;
-  if(v.head !== popup.shownHead){
-    pop.innerHTML = v.head + '<table>' + v.rows + '</table>';
-    popup.shownHead = v.head;
-    popup.shownRows = v.rows;
-  }else if(v.rows !== popup.shownRows){
-    const table = pop.querySelector('table');
-    if(table) table.innerHTML = v.rows;
-    popup.shownRows = v.rows;
+  function updatePopup() {
+    if (!selected || !popup) return;
+    const v = popupHTML(selected);
+    if (!v) return;
+    const el = popup.getElement();
+    const pop = el && el.querySelector('.pop');
+    if (!pop) return;
+    if (v.head !== popup.shownHead) {
+      pop.innerHTML = v.head + '<table>' + v.rows + '</table>';
+      popup.shownHead = v.head;
+      popup.shownRows = v.rows;
+    } else if (v.rows !== popup.shownRows) {
+      const table = pop.querySelector('table');
+      if (table) table.innerHTML = v.rows;
+      popup.shownRows = v.rows;
+    }
+    popup.setLngLat(v.at);
   }
-  popup.setLngLat(v.at);
-}
 
-/* Build both sources from the local cache. Each pair of consecutive points is
+  /* Build both sources from the local cache. Each pair of consecutive points is
    its own feature so the line can be coloured by the altitude recorded on that
    leg rather than by one value for the whole track. */
-function render(){
-  const b = Tracks.build(fleet, selected, {now: Date.now()/1000 + clockSkew, inactive});
-  fading = b.fading;
-  if(mapReady){
-    map.getSource('tracks').setData({type:'FeatureCollection',features:b.tracks});
-    map.getSource('planes').setData({type:'FeatureCollection',features:b.planes});
-    document.getElementById('n-map').textContent = b.tracks.length+'seg/'+b.planes.length+'ac';
+  function render() {
+    const b = Tracks.build(fleet, selected, { now: Date.now() / 1000 + clockSkew, inactive });
+    fading = b.fading;
+    if (mapReady) {
+      map.getSource('tracks').setData({ type: 'FeatureCollection', features: b.tracks });
+      map.getSource('planes').setData({ type: 'FeatureCollection', features: b.planes });
+      document.getElementById('n-map').textContent =
+        b.tracks.length + 'seg/' + b.planes.length + 'ac';
+    }
+    document.getElementById('n-ac').textContent = fleet.size;
+    document.getElementById('n-tr').textContent = b.nTracks;
+    document.getElementById('n-pt').textContent = b.nPts.toLocaleString();
   }
-  document.getElementById('n-ac').textContent = fleet.size;
-  document.getElementById('n-tr').textContent = b.nTracks;
-  document.getElementById('n-pt').textContent = b.nPts.toLocaleString();
-}
 
-/* Transport: the WebSocket is the normal path; polling is the fallback when
+  /* Transport: the WebSocket is the normal path; polling is the fallback when
    it cannot be opened, so the map still updates behind proxies that block
    WebSocket upgrades. Both carry the same message. */
 
-function status(){
-  const ok = lastOk && (Date.now()-lastOk) < 5000;
-  document.getElementById('dot').className = 'dot ' + (ok?'live':'dead');
-  document.getElementById('conn').textContent =
-    !ok ? (transport==='ws' ? 'socket idle' : 'bridge unreachable')
-        : (feedUp ? 'receiving '+source+' · '+transport : 'no '+source+' feed · '+transport);
-}
+  function status() {
+    const ok = lastOk && Date.now() - lastOk < 5000;
+    document.getElementById('dot').className = 'dot ' + (ok ? 'live' : 'dead');
+    document.getElementById('conn').textContent = !ok
+      ? transport === 'ws'
+        ? 'socket idle'
+        : 'bridge unreachable'
+      : feedUp
+        ? 'receiving ' + source + ' · ' + transport
+        : 'no ' + source + ' feed · ' + transport;
+  }
 
-/* Messages per second, from the bridge's running count of messages, over the
+  /* Messages per second, from the bridge's running count of messages, over the
    last few seconds so it does not jump with every one-second update. */
-const rateWin = [];
-function msgRate(count){
-  const now = Date.now();
-  rateWin.push([now, count]);
-  while(rateWin.length > 2 && now - rateWin[0][0] > 5000) rateWin.shift();
-  if(rateWin.length < 2) return null;
-  const [t0, c0] = rateWin[0], dt = (now - t0) / 1000;
-  if(dt < 0.5 || count < c0){ rateWin.splice(0, rateWin.length - 1); return null; }   // bridge restarted
-  return (count - c0) / dt;
-}
-
-function apply(d){
-  lastOk = Date.now(); feedUp = d.connected;
-  clockSkew = d.now - Date.now()/1000; inactive = d.inactive;
-  since = d.seq;
-  source = d.source === 'sbs' ? 'SBS' : 'Beast';
-  logos = !!d.logos;
-  lookups = !!d.lookups;
-  if(d.history > 0 && d.history * 1000 !== historyMs){
-    historyMs = d.history * 1000;
-    document.getElementById('n-hist').textContent = Math.round(d.history / 60) + '\u00a0min';
+  const rateWin = [];
+  function msgRate(count) {
+    const now = Date.now();
+    rateWin.push([now, count]);
+    while (rateWin.length > 2 && now - rateWin[0][0] > 5000) rateWin.shift();
+    if (rateWin.length < 2) return null;
+    const [t0, c0] = rateWin[0],
+      dt = (now - t0) / 1000;
+    if (dt < 0.5 || count < c0) {
+      rateWin.splice(0, rateWin.length - 1);
+      return null;
+    } // bridge restarted
+    return (count - c0) / dt;
   }
-  document.getElementById('n-ln-t').textContent = source + ' messages';
-  document.getElementById('n-ln').textContent = d.messages.toLocaleString();
-  const r = msgRate(d.messages);
-  document.getElementById('n-rate').textContent = r === null ? '—' : r.toFixed(r < 10 ? 1 : 0);
 
-  for(const icao of d.drop) fleet.delete(icao);      // quiet for `inactive` seconds: off the map
-  for(const [icao,u] of Object.entries(d.ac)){
-    let a = fleet.get(icao);
-    if(!a){ a = {meta:{}, pts:[]}; fleet.set(icao,a); }
-    a.meta = {cs:u.cs, alt:u.alt, gs:u.gs, trk:u.trk, vr:u.vr, sq:u.sq, gnd:u.gnd, age:u.age, x:u.x||{}};
-    a.lastSeen = d.now - u.age;                      // on the bridge's clock
-    Tracks.append(a.pts, u.new);
-    a.pts = Tracks.trim(a.pts, d.now, historyMs);    // the bridge's history window
+  function apply(d) {
+    lastOk = Date.now();
+    feedUp = d.connected;
+    clockSkew = d.now - Date.now() / 1000;
+    inactive = d.inactive;
+    since = d.seq;
+    source = d.source === 'sbs' ? 'SBS' : 'Beast';
+    logos = !!d.logos;
+    lookups = !!d.lookups;
+    if (d.history > 0 && d.history * 1000 !== historyMs) {
+      historyMs = d.history * 1000;
+      document.getElementById('n-hist').textContent = Math.round(d.history / 60) + '\u00a0min';
+    }
+    document.getElementById('n-ln-t').textContent = source + ' messages';
+    document.getElementById('n-ln').textContent = d.messages.toLocaleString();
+    const r = msgRate(d.messages);
+    document.getElementById('n-rate').textContent = r === null ? '—' : r.toFixed(r < 10 ? 1 : 0);
+
+    for (const icao of d.drop) fleet.delete(icao); // quiet for `inactive` seconds: off the map
+    for (const [icao, u] of Object.entries(d.ac)) {
+      let a = fleet.get(icao);
+      if (!a) {
+        a = { meta: {}, pts: [] };
+        fleet.set(icao, a);
+      }
+      a.meta = {
+        cs: u.cs,
+        alt: u.alt,
+        gs: u.gs,
+        trk: u.trk,
+        vr: u.vr,
+        sq: u.sq,
+        gnd: u.gnd,
+        age: u.age,
+        x: u.x || {},
+      };
+      a.lastSeen = d.now - u.age; // on the bridge's clock
+      Tracks.append(a.pts, u.new);
+      a.pts = Tracks.trim(a.pts, d.now, historyMs); // the bridge's history window
+    }
+    if (selected && !fleet.has(selected)) {
+      selected = null;
+      if (popup) {
+        const p = popup;
+        popup = null;
+        p.remove();
+      }
+    }
+    render();
+    updatePopup();
+    status();
   }
-  if(selected && !fleet.has(selected)){ selected=null; if(popup){ const p = popup; popup=null; p.remove(); } }
-  render();
-  updatePopup();
-  status();
-}
 
-// Updates arrive once a second, which would take a five-second fade in five
-// visible steps. While anything is fading, redraw between them; otherwise
-// there is nothing to do.
-setInterval(()=>{ if(fading && mapReady) render(); }, 200);
+  // Updates arrive once a second, which would take a five-second fade in five
+  // visible steps. While anything is fading, redraw between them; otherwise
+  // there is nothing to do.
+  setInterval(() => {
+    if (fading && mapReady) render();
+  }, 200);
 
-function startWS(){
-  // Resume from the last point already held, rather than the whole history.
-  // Relative to the page, not the host: behind a reverse proxy the map may be
-  // served from a sub-path such as /radar/, and the socket lives beside it.
-  const base = location.pathname.replace(/[^/]*$/, '');
-  const url = (location.protocol==='https:'?'wss://':'ws://') + location.host + base + 'ws?since=' + since;
-  let sock;
-  try{ sock = new WebSocket(url); }catch(e){ startPolling(); return; }
-  ws = sock;
-  let opened = false;
-  sock.onopen    = ()=>{ opened = true; transport='ws'; stopPolling(); status(); };
-  sock.onmessage = ev=>{ try{ apply(JSON.parse(ev.data)); }catch(e){ console.error('update failed:', e); } };
-  sock.onerror   = ()=>{ if(!opened) startPolling(); };
-  sock.onclose   = ()=>{
-    ws = null;
-    startPolling();                                   // keep data flowing meanwhile
-    setTimeout(startWS, 4000);                        // and try the socket again
-  };
-}
+  function startWS() {
+    // Resume from the last point already held, rather than the whole history.
+    // Relative to the page, not the host: behind a reverse proxy the map may be
+    // served from a sub-path such as /radar/, and the socket lives beside it.
+    const base = location.pathname.replace(/[^/]*$/, '');
+    const url =
+      (location.protocol === 'https:' ? 'wss://' : 'ws://') +
+      location.host +
+      base +
+      'ws?since=' +
+      since;
+    let sock;
+    try {
+      sock = new WebSocket(url);
+    } catch (e) {
+      startPolling();
+      return;
+    }
+    ws = sock;
+    let opened = false;
+    sock.onopen = () => {
+      opened = true;
+      transport = 'ws';
+      stopPolling();
+      status();
+    };
+    sock.onmessage = (ev) => {
+      try {
+        apply(JSON.parse(ev.data));
+      } catch (e) {
+        console.error('update failed:', e);
+      }
+    };
+    sock.onerror = () => {
+      if (!opened) startPolling();
+    };
+    sock.onclose = () => {
+      ws = null;
+      startPolling(); // keep data flowing meanwhile
+      setTimeout(startWS, 4000); // and try the socket again
+    };
+  }
 
-function startPolling(){
-  if(pollTimer !== null) return;
-  transport = 'poll'; status();
-  const tick = async ()=>{
-    if(ws && ws.readyState === WebSocket.OPEN) return; // socket took over
-    try{
-      const r = await fetch('updates?since='+since, {cache:'no-store'});
-      apply(await r.json());
-    }catch(e){ status(); }
-    if(pollTimer !== null) pollTimer = setTimeout(tick, 1000);
-  };
-  pollTimer = setTimeout(tick, 0);
-}
-function stopPolling(){
-  if(pollTimer !== null){ clearTimeout(pollTimer); pollTimer = null; }
-}
+  function startPolling() {
+    if (pollTimer !== null) return;
+    transport = 'poll';
+    status();
+    const tick = async () => {
+      if (ws && ws.readyState === WebSocket.OPEN) return; // socket took over
+      try {
+        const r = await fetch('updates?since=' + since, { cache: 'no-store' });
+        apply(await r.json());
+      } catch (e) {
+        status();
+      }
+      if (pollTimer !== null) pollTimer = setTimeout(tick, 1000);
+    };
+    pollTimer = setTimeout(tick, 0);
+  }
+  function stopPolling() {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
 
-setInterval(status, 1000);
+  setInterval(status, 1000);
 </script>
