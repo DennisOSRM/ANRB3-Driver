@@ -93,6 +93,13 @@
     return out;
   }
 
+  /** An altitude as a flight level: FL045, FL350, and FL1050 for a balloon. */
+  function flightLevel(alt) {
+    var n = String(Math.max(0, Math.round(alt / 100)));
+    while (n.length < 3) n = '0' + n;
+    return 'FL' + n;
+  }
+
   /**
    * What the label says about an aircraft beside its callsign, each part only
    * when it is known: climbing or descending, autopilot engaged (from the
@@ -101,8 +108,8 @@
    * ground speed. A vertical rate inside CLIMB_FPM either way is level flight
    * with some noise in it, and on the ground it means nothing, so neither gets
    * an arrow; nor does the ground get a flight level. The flight level is the
-   * barometric altitude in hundreds of feet, three digits as a controller says
-   * it, and nothing below FL000.
+   * barometric altitude in hundreds of feet, at least three digits as a
+   * controller says it, and nothing below FL000.
    */
   function ornaments(meta) {
     var t = (meta.x && meta.x.target) || {};
@@ -112,7 +119,7 @@
       mil: !!meta.mil,
       ap: !!(t.modes && t.modes.indexOf('AP') >= 0),
       trend: vr == null ? '' : vr >= CLIMB_FPM ? 'climb' : vr <= -CLIMB_FPM ? 'descend' : '',
-      fl: alt == null ? '' : 'FL' + ('00' + Math.max(0, Math.round(alt / 100))).slice(-3),
+      fl: alt == null ? '' : flightLevel(alt),
       spd: meta.gs == null ? '' : Math.round(meta.gs) + 'kt',
     };
   }
@@ -162,8 +169,8 @@
     [
       'quad',
       'A342 A343 A345 A346 A388 B741 B742 B743 B744 B748 B74D B74R B74S BLCF B461 B462 B463 ' +
-        'RJ70 RJ85 RJ1H A400 C130 C30J C135 C141 C17 C5 C5M E3TF E3CF K35R K35E B703 IL76 ' +
-        'IL86 IL96 A124 A225 P3 DHC7 VC10 DC8 CONI L188',
+        'RJ70 RJ85 RJ1H A400 C130 C30J C135 C141 C17 C5 C5M E3TF E3CF K35R K35E B703 IL76 IL86 ' +
+        'IL96 A124 A225 P3 DHC7 VC10 DC8 CONI L188',
     ],
     [
       'heavy',
@@ -172,39 +179,42 @@
     ],
     [
       'regional',
-      'CRJ1 CRJ2 CRJ7 CRJ9 CRJX E135 E145 E35L E170 E175 E190 E195 E290 E295 E75L E75S F70 ' +
-        'F100 BCS1 BCS3 SU95 AJ27 J328',
+      'CRJ1 CRJ2 CRJ7 CRJ9 CRJX E135 E145 E170 E175 E190 E195 E290 E295 E75L E75S F70 F100 ' +
+        'BCS1 BCS3 SU95 AJ27 J328',
     ],
     [
       'bizjet',
-      'C500 C501 C510 C525 C25A C25B C25C C25M C550 C551 C55B C560 C56X C650 C680 C68A C700 ' +
-        'C750 E50P E55P E545 E550 LJ31 LJ35 LJ40 LJ45 LJ60 LJ70 LJ75 GLF2 GLF3 GLF4 GLF5 GLF6 ' +
-        'GA5C GA6C GA7C GA8C GLEX GL5T GL7T GL8T CL30 CL35 CL60 F2TH F900 FA10 FA20 FA50 FA6X ' +
-        'FA7X FA8X H25B H25C HA4T HDJT PC24 PRM1 SF50 BE40',
+      'E35L C500 C501 C510 C525 C25A C25B C25C C25M C550 C551 C55B C560 C56X C650 C680 C68A ' +
+        'C700 C750 E50P E55P E545 E550 LJ31 LJ35 LJ40 LJ45 LJ60 LJ70 LJ75 GLF2 GLF3 GLF4 GLF5 ' +
+        'GLF6 GA5C GA6C GA7C GA8C GLEX GL5T GL7T GL8T CL30 CL35 CL60 F2TH F900 FA10 FA20 FA50 ' +
+        'FA6X FA7X FA8X H25B H25C HA4T HDJT PC24 PRM1 SF50 BE40',
     ],
     [
       'turboprop',
       'AT43 AT44 AT45 AT46 AT72 AT73 AT75 AT76 DH8A DH8B DH8C DH8D DHC6 B190 BE20 BE30 B350 ' +
-        'BE9L BE9T BE99 SF34 JS31 JS32 JS41 SW4 D228 D328 F27 F50 PC12 C208 C08T TBM7 TBM8 ' +
-        'TBM9 P180 L410 AN24 AN26 AN32 C160 C212 C295 CN35 SB20 E120 SH36 PAY2 PAY3 PAY4 KODI ' +
-        'T6 PC21 PC7 PC9 TUCA',
+        'BE9L BE9T BE99 SF34 JS31 JS32 JS41 SW4 D228 D328 F27 F50 PC12 C208 C08T TBM7 TBM8 TBM9 ' +
+        'P180 L410 AN24 AN26 AN32 C160 C212 C295 CN35 SB20 E120 SH36 PAY2 PAY3 PAY4 KODI PC21 ' +
+        'PC7 PC9 TUCA TEX2',
     ],
     [
       'heli',
-      'EC20 EC25 EC30 EC35 EC45 EC55 EC75 H160 AS32 AS50 AS55 AS65 B06 B06T B105 B407 ' +
-        'B412 B427 B429 B430 B505 BK17 R22 R44 R66 A109 A119 A139 A169 A189 S76 S92 NH90 ' +
-        'H60 UH1 CH47 H47 H64 EH10 LYNX TIGR MI8 MI24 G2CA',
+      'EC20 EC25 EC30 EC35 EC45 EC55 EC75 H160 AS32 AS50 AS55 AS65 B06 B06T B105 B407 B412 ' +
+        'B427 B429 B430 B505 BK17 R22 R44 R66 A109 A119 A139 A169 A189 S76 S92 NH90 H60 UH1 ' +
+        'CH47 H47 H64 EH10 LYNX TIGR MI8 MI24 G2CA',
     ],
     [
       'fighter',
       'F16 F15 F18H F18S F35 F22 F5 EUFI TOR RFAL MIR2 HAWK T38 A10 AJET M346 L39 L159 MG29 ' +
         'SU27 SU30 SU35 F4',
     ],
-    ['light', 'ULAC AN2'],
+    ['light', 'ULAC AN2 T6'],
     ['glider', 'GLID'],
     ['balloon', 'BALL'],
   ].forEach(function (g) {
     g[1].split(' ').forEach(function (code) {
+      // A designator in two groups would silently take the later one.
+      if (TYPE_SHAPE[code])
+        throw new Error(code + ' is listed as ' + TYPE_SHAPE[code] + ' and ' + g[0]);
       TYPE_SHAPE[code] = g[0];
     });
   });
@@ -301,6 +311,12 @@
     ornaments: ornaments,
     labelParts: labelParts,
     shape: shape,
+    /** Every listed designator and its symbol, for the tests. */
+    designators: function () {
+      var out = {};
+      for (var k in TYPE_SHAPE) out[k] = TYPE_SHAPE[k];
+      return out;
+    },
     segments: segments,
     head: head,
     build: build,

@@ -219,7 +219,7 @@ eq(T.shape('B744', 'A3'), 'quad', 'a known designator wins over the category');
 eq(T.shape('ZZZZ', 'A7'), 'heli', 'an unlisted designator falls back to the category');
 eq(T.shape('ec35', null), 'heli', 'case does not matter');
 eq(
-  shapes([['P8', 'A3'], ['IL86'], ['DHC7'], ['T6'], ['PC21'], ['AN2']]),
+  shapes([['P8', 'A3'], ['IL86'], ['DHC7'], ['TEX2'], ['PC21'], ['AN2']]),
   ['jet', 'quad', 'quad', 'turboprop', 'turboprop', 'light'],
   'a twin-engined P-8, four-engined IL-86 and Dash 7, turboprop trainers, a piston An-2',
 );
@@ -313,6 +313,543 @@ ok(
   held.every((p, i) => i === 0 || p[0] > held[i - 1][0]),
   'time only moves forward along a track',
 );
+
+// --- every case of the label ---------------------------------------------
+// Each field at and either side of its boundaries, with the others unknown.
+const part = (meta, k) => T.ornaments(meta)[k];
+eq(
+  [-2000, -300, -299, 0, 299, 300, 2000].map((vr) => part({ vr }, 'trend')),
+  ['descend', 'descend', '', '', '', 'climb', 'climb'],
+  'the arrow switches on at exactly CLIMB_FPM either way',
+);
+eq(
+  [undefined, null].map((vr) => part({ vr }, 'trend')),
+  ['', ''],
+  'no vertical rate, no arrow',
+);
+eq(
+  [-2000, 2000].map((vr) => part({ vr, gnd: 1 }, 'trend')),
+  ['', ''],
+  'on the ground no arrow either way',
+);
+eq(
+  [
+    undefined,
+    {},
+    { target: {} },
+    { target: { modes: [] } },
+    { target: { modes: ['ALT', 'VNAV', 'LNAV', 'APP'] } },
+    { target: { modes: ['AP'] } },
+    { target: { modes: ['LNAV', 'AP'] } },
+  ].map((x) => part({ x }, 'ap')),
+  [false, false, false, false, false, true, true],
+  'AP only when the modes are known and include it',
+);
+eq(
+  [undefined, false, true].map((mil) => part({ mil }, 'mil')),
+  [false, false, true],
+  'M only for a military address',
+);
+eq(
+  [undefined, null, -350, 0, 49, 50, 4500, 34949, 34950, 99949, 99950, 126700].map((alt) =>
+    part({ alt }, 'fl'),
+  ),
+  [
+    '',
+    '',
+    'FL000',
+    'FL000',
+    'FL000',
+    'FL001',
+    'FL045',
+    'FL349',
+    'FL350',
+    'FL999',
+    'FL1000',
+    'FL1267',
+  ],
+  'flight levels round to the nearest hundred feet, at least three digits, none below FL000',
+);
+eq(part({ alt: 35000, gnd: 1 }, 'fl'), '', 'no flight level on the ground');
+eq(
+  [undefined, null, 0, 0.49, 0.5, 451.49, 451.5, 1200].map((gs) => part({ gs }, 'spd')),
+  ['', '', '0kt', '0kt', '1kt', '451kt', '452kt', '1200kt'],
+  'ground speed rounds to the knot',
+);
+eq(part({ gs: 12, gnd: 1 }, 'spd'), '12kt', 'speed is shown on the ground too');
+
+// Every combination of the five parts, against the label written out by hand:
+// the markers after the callsign each with a space before it, the figures on
+// a line of their own with a space between them.
+let combos = 0;
+for (const trend of ['', 'climb', 'descend'])
+  for (const ap of [false, true])
+    for (const mil of [false, true])
+      for (const fl of ['', 'FL350'])
+        for (const spd of ['', '452kt']) {
+          const o = { trend, ap, mil, fl, spd };
+          const marks = [trend && { climb: '▲', descend: '▼' }[trend], ap && 'AP', mil && 'M'];
+          const figures = [fl, spd].filter(Boolean);
+          const want =
+            marks
+              .filter(Boolean)
+              .map((m) => ' ' + m)
+              .join('') + (figures.length ? '\n' + figures.join(' ') : '');
+          const got = T.labelParts(o);
+          ok(got.join('') === want, 'label for ' + JSON.stringify(o) + ': ' + JSON.stringify(got));
+          ok(
+            got.every((p, i) => !p === ![...marks, fl, spd][i]),
+            'a part is empty exactly when it is unknown: ' + JSON.stringify(o),
+          );
+          combos++;
+        }
+eq(combos, 48, 'all 48 combinations were tried');
+
+// --- every case of the symbol ----------------------------------------------
+eq(
+  ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'].map((c) => T.shape(null, c)),
+  ['jet', 'light', 'regional', 'jet', 'jet', 'heavy', 'fighter', 'heli'],
+  'every category in set A',
+);
+eq(
+  ['B0', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7'].map((c) => T.shape(null, c)),
+  ['jet', 'glider', 'balloon', 'jet', 'light', 'jet', 'drone', 'jet'],
+  'every category in set B; parachutists, reserved and space vehicles fall back to a jet',
+);
+eq(
+  ['C0', 'C1', 'C2', 'C3', 'C4', 'D0', undefined, null, ''].map((c) => T.shape(null, c)),
+  ['jet', 'ground', 'ground', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet'],
+  'surface vehicles are ground; obstacles, set D and no category are a jet',
+);
+eq(
+  [
+    'C120',
+    'C150',
+    'C152',
+    'C172',
+    'C182',
+    'C195',
+    'C205',
+    'C206',
+    'C210',
+    'C240',
+    'P28A',
+    'P28R',
+    'PA18',
+    'PA34',
+    'PA46',
+    'SR20',
+    'SR22',
+    'DA20',
+    'DA40',
+    'DA42',
+    'DA62',
+    'DR40',
+    'DR30',
+    'BE33',
+    'BE35',
+    'BE36',
+    'BE55',
+    'BE58',
+    'BE76',
+    'M20P',
+    'M20T',
+    'C77R',
+    'AA5',
+    'TB10',
+    'TB20',
+    'RV7',
+    'RV10',
+    'P68',
+    'G115',
+    'Z42',
+    'C42',
+  ].filter((code) => T.shape(code, 'A3') !== 'light'),
+  [],
+  'every light-aircraft family, even under a category that says otherwise',
+);
+eq(
+  ['C250', 'C300', 'DA10', 'DA70', 'DR50', 'BE37', 'BE56', 'BE77', 'TB30', 'PA'].map((code) =>
+    T.shape(code, 'A3'),
+  ),
+  ['jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet'],
+  'designators just outside the families are not light aircraft',
+);
+eq(
+  [
+    ['C130', 'A1'],
+    ['C208', 'A1'],
+    ['C25A', 'A1'],
+    ['C68A', 'A1'],
+    ['C17', 'A1'],
+  ].map(([code, cat]) => T.shape(code, cat)),
+  ['quad', 'turboprop', 'bizjet', 'bizjet', 'quad'],
+  'a listed designator wins over the light-aircraft families and the category',
+);
+eq(
+  [
+    ['A320', 'A5'],
+    ['A320', undefined],
+    ['XXXX', 'B2'],
+  ].map(([code, cat]) => T.shape(code, cat)),
+  ['heavy', 'jet', 'balloon'],
+  'an unlisted designator leaves the category to decide',
+);
+eq(
+  [{ type: 'B744' }, { type: 'B744', x: {} }, { x: { category: 'A7' } }, {}].map(
+    (meta) => T.head('X', climb, meta).properties.shape,
+  ),
+  ['quad', 'quad', 'heli', 'jet'],
+  'the icon takes its symbol from the type, or the category, or neither',
+);
+
+// --- every listed designator ----------------------------------------------
+// Written out aircraft by aircraft, apart from the lists in tracks.js, so a
+// designator put in the wrong group, or a group's list mistyped, shows here.
+// prettier-ignore
+const DESIGNATORS = [
+  ['A342', 'quad', 'Airbus A340-200'],
+  ['A343', 'quad', 'Airbus A340-300'],
+  ['A345', 'quad', 'Airbus A340-500'],
+  ['A346', 'quad', 'Airbus A340-600'],
+  ['A388', 'quad', 'Airbus A380-800'],
+  ['B741', 'quad', 'Boeing 747-100'],
+  ['B742', 'quad', 'Boeing 747-200'],
+  ['B743', 'quad', 'Boeing 747-300'],
+  ['B744', 'quad', 'Boeing 747-400'],
+  ['B748', 'quad', 'Boeing 747-8'],
+  ['B74D', 'quad', 'Boeing 747-400 Domestic'],
+  ['B74R', 'quad', 'Boeing 747SR'],
+  ['B74S', 'quad', 'Boeing 747SP'],
+  ['BLCF', 'quad', 'Boeing 747 Dreamlifter'],
+  ['B461', 'quad', 'BAe 146-100'],
+  ['B462', 'quad', 'BAe 146-200'],
+  ['B463', 'quad', 'BAe 146-300'],
+  ['RJ70', 'quad', 'Avro RJ70'],
+  ['RJ85', 'quad', 'Avro RJ85'],
+  ['RJ1H', 'quad', 'Avro RJ100'],
+  ['A400', 'quad', 'Airbus A400M'],
+  ['C130', 'quad', 'Lockheed C-130 Hercules'],
+  ['C30J', 'quad', 'Lockheed C-130J'],
+  ['C135', 'quad', 'Boeing C-135'],
+  ['C141', 'quad', 'Lockheed C-141 StarLifter'],
+  ['C17', 'quad', 'Boeing C-17 Globemaster III'],
+  ['C5', 'quad', 'Lockheed C-5 Galaxy'],
+  ['C5M', 'quad', 'Lockheed C-5M Super Galaxy'],
+  ['E3TF', 'quad', 'Boeing E-3 Sentry (TF33)'],
+  ['E3CF', 'quad', 'Boeing E-3 Sentry (CFM56)'],
+  ['K35R', 'quad', 'Boeing KC-135R Stratotanker'],
+  ['K35E', 'quad', 'Boeing KC-135E'],
+  ['B703', 'quad', 'Boeing 707-300'],
+  ['IL76', 'quad', 'Ilyushin Il-76'],
+  ['IL86', 'quad', 'Ilyushin Il-86'],
+  ['IL96', 'quad', 'Ilyushin Il-96'],
+  ['A124', 'quad', 'Antonov An-124'],
+  ['A225', 'quad', 'Antonov An-225'],
+  ['P3', 'quad', 'Lockheed P-3 Orion'],
+  ['DHC7', 'quad', 'de Havilland Canada Dash 7'],
+  ['VC10', 'quad', 'Vickers VC10'],
+  ['DC8', 'quad', 'Douglas DC-8'],
+  ['CONI', 'quad', 'Lockheed Constellation'],
+  ['L188', 'quad', 'Lockheed L-188 Electra'],
+  ['A306', 'heavy', 'Airbus A300-600'],
+  ['A30B', 'heavy', 'Airbus A300B'],
+  ['A310', 'heavy', 'Airbus A310'],
+  ['A332', 'heavy', 'Airbus A330-200'],
+  ['A333', 'heavy', 'Airbus A330-300'],
+  ['A337', 'heavy', 'Airbus BelugaXL'],
+  ['A338', 'heavy', 'Airbus A330-800neo'],
+  ['A339', 'heavy', 'Airbus A330-900neo'],
+  ['A359', 'heavy', 'Airbus A350-900'],
+  ['A35K', 'heavy', 'Airbus A350-1000'],
+  ['B762', 'heavy', 'Boeing 767-200'],
+  ['B763', 'heavy', 'Boeing 767-300'],
+  ['B764', 'heavy', 'Boeing 767-400'],
+  ['B772', 'heavy', 'Boeing 777-200'],
+  ['B773', 'heavy', 'Boeing 777-300'],
+  ['B77L', 'heavy', 'Boeing 777-200LR'],
+  ['B77W', 'heavy', 'Boeing 777-300ER'],
+  ['B778', 'heavy', 'Boeing 777-8'],
+  ['B779', 'heavy', 'Boeing 777-9'],
+  ['B788', 'heavy', 'Boeing 787-8'],
+  ['B789', 'heavy', 'Boeing 787-9'],
+  ['B78X', 'heavy', 'Boeing 787-10'],
+  ['MD11', 'heavy', 'McDonnell Douglas MD-11'],
+  ['DC10', 'heavy', 'McDonnell Douglas DC-10'],
+  ['L101', 'heavy', 'Lockheed L-1011 TriStar'],
+  ['KC10', 'heavy', 'McDonnell Douglas KC-10 Extender'],
+  ['CRJ1', 'regional', 'Bombardier CRJ100'],
+  ['CRJ2', 'regional', 'Bombardier CRJ200'],
+  ['CRJ7', 'regional', 'Bombardier CRJ700'],
+  ['CRJ9', 'regional', 'Bombardier CRJ900'],
+  ['CRJX', 'regional', 'Bombardier CRJ1000'],
+  ['E135', 'regional', 'Embraer ERJ 135'],
+  ['E145', 'regional', 'Embraer ERJ 145'],
+  ['E170', 'regional', 'Embraer 170'],
+  ['E175', 'regional', 'Embraer 175'],
+  ['E190', 'regional', 'Embraer 190'],
+  ['E195', 'regional', 'Embraer 195'],
+  ['E290', 'regional', 'Embraer 190-E2'],
+  ['E295', 'regional', 'Embraer 195-E2'],
+  ['E75L', 'regional', 'Embraer 175 (long wing)'],
+  ['E75S', 'regional', 'Embraer 175 (short wing)'],
+  ['F70', 'regional', 'Fokker 70'],
+  ['F100', 'regional', 'Fokker 100'],
+  ['BCS1', 'regional', 'Airbus A220-100'],
+  ['BCS3', 'regional', 'Airbus A220-300'],
+  ['SU95', 'regional', 'Sukhoi Superjet 100'],
+  ['AJ27', 'regional', 'COMAC ARJ21'],
+  ['J328', 'regional', 'Fairchild Dornier 328JET'],
+  ['E35L', 'bizjet', 'Embraer Legacy 600'],
+  ['C500', 'bizjet', 'Cessna Citation I'],
+  ['C501', 'bizjet', 'Cessna Citation I/SP'],
+  ['C510', 'bizjet', 'Cessna Citation Mustang'],
+  ['C525', 'bizjet', 'Cessna CitationJet'],
+  ['C25A', 'bizjet', 'Cessna CJ2'],
+  ['C25B', 'bizjet', 'Cessna CJ3'],
+  ['C25C', 'bizjet', 'Cessna CJ4'],
+  ['C25M', 'bizjet', 'Cessna Citation M2'],
+  ['C550', 'bizjet', 'Cessna Citation II'],
+  ['C551', 'bizjet', 'Cessna Citation II/SP'],
+  ['C55B', 'bizjet', 'Cessna Citation Bravo'],
+  ['C560', 'bizjet', 'Cessna Citation V'],
+  ['C56X', 'bizjet', 'Cessna Citation Excel'],
+  ['C650', 'bizjet', 'Cessna Citation III'],
+  ['C680', 'bizjet', 'Cessna Citation Sovereign'],
+  ['C68A', 'bizjet', 'Cessna Citation Latitude'],
+  ['C700', 'bizjet', 'Cessna Citation Longitude'],
+  ['C750', 'bizjet', 'Cessna Citation X'],
+  ['E50P', 'bizjet', 'Embraer Phenom 100'],
+  ['E55P', 'bizjet', 'Embraer Phenom 300'],
+  ['E545', 'bizjet', 'Embraer Praetor 500'],
+  ['E550', 'bizjet', 'Embraer Praetor 600'],
+  ['LJ31', 'bizjet', 'Learjet 31'],
+  ['LJ35', 'bizjet', 'Learjet 35'],
+  ['LJ40', 'bizjet', 'Learjet 40'],
+  ['LJ45', 'bizjet', 'Learjet 45'],
+  ['LJ60', 'bizjet', 'Learjet 60'],
+  ['LJ70', 'bizjet', 'Learjet 70'],
+  ['LJ75', 'bizjet', 'Learjet 75'],
+  ['GLF2', 'bizjet', 'Gulfstream II'],
+  ['GLF3', 'bizjet', 'Gulfstream III'],
+  ['GLF4', 'bizjet', 'Gulfstream IV'],
+  ['GLF5', 'bizjet', 'Gulfstream V'],
+  ['GLF6', 'bizjet', 'Gulfstream G650'],
+  ['GA5C', 'bizjet', 'Gulfstream G500'],
+  ['GA6C', 'bizjet', 'Gulfstream G600'],
+  ['GA7C', 'bizjet', 'Gulfstream G700'],
+  ['GA8C', 'bizjet', 'Gulfstream G800'],
+  ['GLEX', 'bizjet', 'Bombardier Global Express'],
+  ['GL5T', 'bizjet', 'Bombardier Global 5000'],
+  ['GL7T', 'bizjet', 'Bombardier Global 7500'],
+  ['GL8T', 'bizjet', 'Bombardier Global 8000'],
+  ['CL30', 'bizjet', 'Bombardier Challenger 300'],
+  ['CL35', 'bizjet', 'Bombardier Challenger 350'],
+  ['CL60', 'bizjet', 'Bombardier Challenger 600'],
+  ['F2TH', 'bizjet', 'Dassault Falcon 2000'],
+  ['F900', 'bizjet', 'Dassault Falcon 900'],
+  ['FA10', 'bizjet', 'Dassault Falcon 10'],
+  ['FA20', 'bizjet', 'Dassault Falcon 20'],
+  ['FA50', 'bizjet', 'Dassault Falcon 50'],
+  ['FA6X', 'bizjet', 'Dassault Falcon 6X'],
+  ['FA7X', 'bizjet', 'Dassault Falcon 7X'],
+  ['FA8X', 'bizjet', 'Dassault Falcon 8X'],
+  ['H25B', 'bizjet', 'Hawker 800'],
+  ['H25C', 'bizjet', 'Hawker 1000'],
+  ['HA4T', 'bizjet', 'Hawker 4000'],
+  ['HDJT', 'bizjet', 'Honda HA-420 HondaJet'],
+  ['PC24', 'bizjet', 'Pilatus PC-24'],
+  ['PRM1', 'bizjet', 'Beechcraft Premier I'],
+  ['SF50', 'bizjet', 'Cirrus Vision Jet'],
+  ['BE40', 'bizjet', 'Beechjet 400'],
+  ['AT43', 'turboprop', 'ATR 42-300'],
+  ['AT44', 'turboprop', 'ATR 42-400'],
+  ['AT45', 'turboprop', 'ATR 42-500'],
+  ['AT46', 'turboprop', 'ATR 42-600'],
+  ['AT72', 'turboprop', 'ATR 72'],
+  ['AT73', 'turboprop', 'ATR 72-210'],
+  ['AT75', 'turboprop', 'ATR 72-500'],
+  ['AT76', 'turboprop', 'ATR 72-600'],
+  ['DH8A', 'turboprop', 'Dash 8-100'],
+  ['DH8B', 'turboprop', 'Dash 8-200'],
+  ['DH8C', 'turboprop', 'Dash 8-300'],
+  ['DH8D', 'turboprop', 'Dash 8-400'],
+  ['DHC6', 'turboprop', 'DHC-6 Twin Otter'],
+  ['B190', 'turboprop', 'Beechcraft 1900'],
+  ['BE20', 'turboprop', 'King Air 200'],
+  ['BE30', 'turboprop', 'King Air 300'],
+  ['B350', 'turboprop', 'King Air 350'],
+  ['BE9L', 'turboprop', 'King Air 90'],
+  ['BE9T', 'turboprop', 'King Air F90'],
+  ['BE99', 'turboprop', 'Beechcraft 99'],
+  ['SF34', 'turboprop', 'Saab 340'],
+  ['JS31', 'turboprop', 'BAe Jetstream 31'],
+  ['JS32', 'turboprop', 'BAe Jetstream 32'],
+  ['JS41', 'turboprop', 'BAe Jetstream 41'],
+  ['SW4', 'turboprop', 'Fairchild Metro'],
+  ['D228', 'turboprop', 'Dornier 228'],
+  ['D328', 'turboprop', 'Dornier 328'],
+  ['F27', 'turboprop', 'Fokker F27'],
+  ['F50', 'turboprop', 'Fokker 50'],
+  ['PC12', 'turboprop', 'Pilatus PC-12'],
+  ['C208', 'turboprop', 'Cessna Caravan'],
+  ['C08T', 'turboprop', 'Cessna turbine conversion'],
+  ['TBM7', 'turboprop', 'Socata TBM 700'],
+  ['TBM8', 'turboprop', 'Socata TBM 850'],
+  ['TBM9', 'turboprop', 'Daher TBM 900'],
+  ['P180', 'turboprop', 'Piaggio Avanti'],
+  ['L410', 'turboprop', 'Let L-410'],
+  ['AN24', 'turboprop', 'Antonov An-24'],
+  ['AN26', 'turboprop', 'Antonov An-26'],
+  ['AN32', 'turboprop', 'Antonov An-32'],
+  ['C160', 'turboprop', 'Transall C-160'],
+  ['C212', 'turboprop', 'CASA C-212'],
+  ['C295', 'turboprop', 'Airbus C295'],
+  ['CN35', 'turboprop', 'CASA CN-235'],
+  ['SB20', 'turboprop', 'Saab 2000'],
+  ['E120', 'turboprop', 'Embraer Brasilia'],
+  ['SH36', 'turboprop', 'Shorts 360'],
+  ['PAY2', 'turboprop', 'Piper Cheyenne II'],
+  ['PAY3', 'turboprop', 'Piper Cheyenne III'],
+  ['PAY4', 'turboprop', 'Piper Cheyenne 400'],
+  ['KODI', 'turboprop', 'Quest Kodiak'],
+  ['PC21', 'turboprop', 'Pilatus PC-21'],
+  ['PC7', 'turboprop', 'Pilatus PC-7'],
+  ['PC9', 'turboprop', 'Pilatus PC-9'],
+  ['TUCA', 'turboprop', 'Embraer Tucano'],
+  ['TEX2', 'turboprop', 'Beechcraft T-6 Texan II'],
+  ['EC20', 'heli', 'Eurocopter EC120'],
+  ['EC25', 'heli', 'Airbus H225'],
+  ['EC30', 'heli', 'Airbus H130'],
+  ['EC35', 'heli', 'Airbus H135'],
+  ['EC45', 'heli', 'Airbus H145'],
+  ['EC55', 'heli', 'Airbus H155'],
+  ['EC75', 'heli', 'Airbus H175'],
+  ['H160', 'heli', 'Airbus H160'],
+  ['AS32', 'heli', 'Airbus H215 Super Puma'],
+  ['AS50', 'heli', 'Airbus H125 Ecureuil'],
+  ['AS55', 'heli', 'Eurocopter AS355 Ecureuil 2'],
+  ['AS65', 'heli', 'Eurocopter AS365 Dauphin'],
+  ['B06', 'heli', 'Bell 206'],
+  ['B06T', 'heli', 'Bell 206L TwinRanger'],
+  ['B105', 'heli', 'MBB Bo 105'],
+  ['B407', 'heli', 'Bell 407'],
+  ['B412', 'heli', 'Bell 412'],
+  ['B427', 'heli', 'Bell 427'],
+  ['B429', 'heli', 'Bell 429'],
+  ['B430', 'heli', 'Bell 430'],
+  ['B505', 'heli', 'Bell 505'],
+  ['BK17', 'heli', 'MBB/Kawasaki BK 117'],
+  ['R22', 'heli', 'Robinson R22'],
+  ['R44', 'heli', 'Robinson R44'],
+  ['R66', 'heli', 'Robinson R66'],
+  ['A109', 'heli', 'Leonardo AW109'],
+  ['A119', 'heli', 'Leonardo AW119'],
+  ['A139', 'heli', 'Leonardo AW139'],
+  ['A169', 'heli', 'Leonardo AW169'],
+  ['A189', 'heli', 'Leonardo AW189'],
+  ['S76', 'heli', 'Sikorsky S-76'],
+  ['S92', 'heli', 'Sikorsky S-92'],
+  ['NH90', 'heli', 'NHIndustries NH90'],
+  ['H60', 'heli', 'Sikorsky H-60 Black Hawk'],
+  ['UH1', 'heli', 'Bell UH-1 Iroquois'],
+  ['CH47', 'heli', 'Boeing CH-47 Chinook'],
+  ['H47', 'heli', 'Boeing H-47 Chinook'],
+  ['H64', 'heli', 'Boeing AH-64 Apache'],
+  ['EH10', 'heli', 'Leonardo AW101'],
+  ['LYNX', 'heli', 'Westland Lynx'],
+  ['TIGR', 'heli', 'Airbus Tiger'],
+  ['MI8', 'heli', 'Mil Mi-8'],
+  ['MI24', 'heli', 'Mil Mi-24'],
+  ['G2CA', 'heli', 'Guimbal Cabri G2'],
+  ['F16', 'fighter', 'General Dynamics F-16'],
+  ['F15', 'fighter', 'McDonnell Douglas F-15'],
+  ['F18H', 'fighter', 'Boeing F/A-18E/F Super Hornet'],
+  ['F18S', 'fighter', 'McDonnell Douglas F/A-18 Hornet'],
+  ['F35', 'fighter', 'Lockheed Martin F-35'],
+  ['F22', 'fighter', 'Lockheed Martin F-22'],
+  ['F5', 'fighter', 'Northrop F-5'],
+  ['EUFI', 'fighter', 'Eurofighter Typhoon'],
+  ['TOR', 'fighter', 'Panavia Tornado'],
+  ['RFAL', 'fighter', 'Dassault Rafale'],
+  ['MIR2', 'fighter', 'Dassault Mirage 2000'],
+  ['HAWK', 'fighter', 'BAE Hawk'],
+  ['T38', 'fighter', 'Northrop T-38 Talon'],
+  ['A10', 'fighter', 'Fairchild A-10'],
+  ['AJET', 'fighter', 'Dassault/Dornier Alpha Jet'],
+  ['M346', 'fighter', 'Leonardo M-346'],
+  ['L39', 'fighter', 'Aero L-39 Albatros'],
+  ['L159', 'fighter', 'Aero L-159 Alca'],
+  ['MG29', 'fighter', 'Mikoyan MiG-29'],
+  ['SU27', 'fighter', 'Sukhoi Su-27'],
+  ['SU30', 'fighter', 'Sukhoi Su-30'],
+  ['SU35', 'fighter', 'Sukhoi Su-35'],
+  ['F4', 'fighter', 'McDonnell Douglas F-4 Phantom II'],
+  ['ULAC', 'light', 'ultralight'],
+  ['AN2', 'light', 'Antonov An-2'],
+  ['T6', 'light', 'North American T-6 Texan'],
+  ['GLID', 'glider', 'glider'],
+  ['BALL', 'balloon', 'balloon'],
+];
+for (const [code, want, name] of DESIGNATORS)
+  ok(
+    T.shape(code, null) === want,
+    code + ' (' + name + ') is ' + want + ', not ' + T.shape(code, null),
+  );
+// And nothing listed in tracks.js is left out of the table, or the other way.
+eq(
+  Object.keys(T.designators()).filter((code) => !DESIGNATORS.some((d) => d[0] === code)),
+  [],
+  'every designator tracks.js lists is in the table',
+);
+eq(
+  DESIGNATORS.filter(([code, want]) => T.designators()[code] !== want).map((d) => d[0]),
+  [],
+  'every designator in the table is listed in tracks.js under the same symbol',
+);
+eq(
+  new Set(DESIGNATORS.map((d) => d[0])).size,
+  DESIGNATORS.length,
+  'no designator twice in the table',
+);
+
+// --- the remaining defaults ------------------------------------------------
+const fresh = [];
+eq(T.append(fresh, climb.slice(0, 2)), 2, 'an empty track takes every point');
+ok(!T.isGap(climb[0], climb[1], 5000), 'four seconds is no gap at a five-second threshold');
+ok(T.isGap(climb[0], climb[1], 3000), 'but is one at three seconds');
+eq(T.fade(55, 60, 10000), 0.5, 'a longer fade starts earlier');
+eq(T.segments('X', climb).length, climb.length - 1, 'segments without options');
+eq(T.build(new Map([['X', { meta: {}, pts: climb }]])).planes.length, 1, 'build without options');
+
+// Where there is no globalThis, the module hangs itself on `this`.
+{
+  const vm = require('vm');
+  const holder = {};
+  vm.runInNewContext(
+    '(function (globalThis, module) {\n' +
+      require('fs').readFileSync(__dirname + '/tracks.js', 'utf8') +
+      '\n}).call(holder)',
+    { holder },
+  );
+  eq(typeof holder.Tracks.shape, 'function', 'loaded without globalThis, it sets this.Tracks');
+}
+
+// A designator put in two groups stops the page from loading, rather than
+// silently taking the later group.
+{
+  const vm = require('vm');
+  const src = require('fs').readFileSync(__dirname + '/tracks.js', 'utf8');
+  const twice = src.replace("['balloon', 'BALL']", "['balloon', 'BALL GLID']");
+  ok(twice !== src, 'the test found the balloon list to change');
+  let thrown = null;
+  try {
+    vm.runInNewContext(twice, {});
+  } catch (e) {
+    thrown = e.message;
+  }
+  eq(thrown, 'GLID is listed as glider and balloon', 'a designator in two groups is refused');
+}
 
 console.log(checks + ' checks, ' + fails + ' failures');
 process.exit(fails ? 1 : 0);
