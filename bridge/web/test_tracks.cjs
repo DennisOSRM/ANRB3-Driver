@@ -421,60 +421,42 @@ eq(
   ['jet', 'ground', 'ground', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet'],
   'surface vehicles are ground; obstacles, set D and no category are a jet',
 );
+// One designator from each end of every family in the light-aircraft rule.
+// prettier-ignore
+const LIGHT_CODES = [
+  'C120', 'C140', 'C150', 'C152', 'C162', 'C170', 'C172', 'C175', 'C177', 'C180', 'C182',
+  'C185', 'C188', 'C195', 'C205', 'C206', 'C207', 'C210', 'C310', 'C340', 'C402', 'C414',
+  'C421', 'C77R', 'C42', 'P28A', 'P28B', 'P28R', 'PA18', 'PA22', 'PA24', 'PA31', 'PA34',
+  'PA44', 'PA46', 'SR20', 'SR22', 'DA20', 'DA40', 'DA42', 'DA50', 'DA62', 'DR40', 'BE33',
+  'BE35', 'BE36', 'BE55', 'BE58', 'BE76', 'M20P', 'M20T', 'AA5', 'TB9', 'TB10', 'TB20',
+  'TB21', 'RV4', 'RV7', 'RV10', 'RV14', 'P68', 'G115', 'Z42', 'c172',
+];
 eq(
-  [
-    'C120',
-    'C150',
-    'C152',
-    'C172',
-    'C182',
-    'C195',
-    'C205',
-    'C206',
-    'C210',
-    'C240',
-    'P28A',
-    'P28R',
-    'PA18',
-    'PA34',
-    'PA46',
-    'SR20',
-    'SR22',
-    'DA20',
-    'DA40',
-    'DA42',
-    'DA62',
-    'DR40',
-    'DR30',
-    'BE33',
-    'BE35',
-    'BE36',
-    'BE55',
-    'BE58',
-    'BE76',
-    'M20P',
-    'M20T',
-    'C77R',
-    'AA5',
-    'TB10',
-    'TB20',
-    'RV7',
-    'RV10',
-    'P68',
-    'G115',
-    'Z42',
-    'C42',
-  ].filter((code) => T.shape(code, 'A3') !== 'light'),
+  LIGHT_CODES.filter((code) => T.shape(code, 'A3') !== 'light'),
   [],
   'every light-aircraft family, even under a category that says otherwise',
 );
-eq(
-  ['C250', 'C300', 'DA10', 'DA70', 'DR50', 'BE37', 'BE56', 'BE77', 'TB30', 'PA'].map((code) =>
-    T.shape(code, 'A3'),
-  ),
-  ['jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet', 'jet'],
-  'designators just outside the families are not light aircraft',
-);
+// Designators that share a family's start but are not light aircraft: the
+// whole designator has to match, so these fall back to their category.
+// prettier-ignore
+const NOT_LIGHT = [
+  ['C101', 'A6', 'fighter', 'CASA C-101 Aviojet'], ['C123', 'A3', 'jet', 'Fairchild C-123 Provider'],
+  ['C119', 'A3', 'jet', 'Fairchild C-119'], ['C121', 'A3', 'jet', 'Lockheed C-121'],
+  ['C425', 'A2', 'regional', 'Cessna Conquest I'], ['C441', 'A2', 'regional', 'Cessna Conquest II'],
+  ['C250', 'A3', 'jet', 'none'], ['C300', 'A3', 'jet', 'none'], ['C1', 'A3', 'jet', 'none'],
+  ['C1720', 'A3', 'jet', 'too long'], ['P28', 'A3', 'jet', 'no variant letter'],
+  ['PA42', 'A2', 'regional', 'Piper Cheyenne III, PAY3 elsewhere'], ['PA47', 'A3', 'jet', 'PiperJet'],
+  ['SR21', 'A3', 'jet', 'none'], ['SR71', 'A3', 'jet', 'Lockheed SR-71'], ['DA10', 'A3', 'jet', 'none'],
+  ['DA70', 'A3', 'jet', 'none'], ['DR30', 'A3', 'jet', 'none'], ['DR50', 'A3', 'jet', 'none'],
+  ['BE34', 'A3', 'jet', 'none'], ['BE37', 'A3', 'jet', 'none'], ['BE56', 'A3', 'jet', 'none'],
+  ['BE77', 'A3', 'jet', 'none'], ['M20', 'A3', 'jet', 'no variant letter'],
+  ['TB30', 'A6', 'fighter', 'Socata TB 30 Epsilon'], ['TB11', 'A3', 'jet', 'none'],
+  ['RV', 'A3', 'jet', 'no number'], ['RV100', 'A3', 'jet', 'too long'], ['P680', 'A3', 'jet', 'too long'],
+  ['C42A', 'A3', 'jet', 'too long'], ['PA', 'A3', 'jet', 'no number'],
+];
+for (const [code, cat, want, name] of NOT_LIGHT)
+  eq(T.shape(code, cat), want, code + ' (' + name + ') follows its category ' + cat);
+
 eq(
   [
     ['C130', 'A1'],

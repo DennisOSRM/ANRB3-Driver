@@ -218,12 +218,38 @@
       TYPE_SHAPE[code] = g[0];
     });
   });
-  // Light singles and twins are too many to list, and their designators have
-  // readable families: Cessna C1xx and C2xx pistons, Pipers, Cirrus, Diamonds
-  // and the like. The families share their prefixes with a few military
-  // types - C135, C141, C160, C212 - so the lists above are looked at first.
-  var LIGHT =
-    /^(C1\d\d|C2[0-4]\d|P28|PA\d|SR2|DA[2-6]|DR[34]|BE3[3-6]|BE5[58]|BE76|M20|C77R|AA5|TB[12]\d|RV\d|P68|G115|Z42|C42)/;
+  // Light singles and twins are too many to list one by one, so they are
+  // matched as families - Cessna pistons, Pipers, Cirrus, Diamonds, Robins,
+  // Bonanzas and Barons, Mooneys, Socatas, Van's - but each written out to
+  // its whole designator. A bare prefix such as C1 would take in the CASA
+  // C-101 jet trainer and the C-123 transport, and C42 the Conquest turboprop
+  // C425; anything not matched falls back to its category.
+  var LIGHT = new RegExp(
+    '^(' +
+      [
+        'C1(20|40|50|52|62|70|72|75|77|80|82|85|88|95)',
+        'C2(05|06|07|10)',
+        'C(310|340|402|414|421)',
+        'C77R',
+        'C42',
+        'P28[A-Z]',
+        'PA(1[0-9]|2[0-9]|3[0-4]|44|46)',
+        'SR2[02]',
+        'DA(20|40|42|50|62)',
+        'DR40',
+        'BE3[356]',
+        'BE5[58]',
+        'BE76',
+        'M20[A-Z]',
+        'AA5',
+        'TB(9|10|20|21)',
+        'RV\\d{1,2}',
+        'P68',
+        'G115',
+        'Z42',
+      ].join('|') +
+      ')$',
+  );
   var CATEGORY_SHAPE = {
     A1: 'light',
     A2: 'regional',
