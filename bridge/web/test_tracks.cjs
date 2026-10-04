@@ -219,6 +219,16 @@ eq(T.shape('B744', 'A3'), 'quad', 'a known designator wins over the category');
 eq(T.shape('ZZZZ', 'A7'), 'heli', 'an unlisted designator falls back to the category');
 eq(T.shape('ec35', null), 'heli', 'case does not matter');
 eq(
+  shapes([['P8', 'A3'], ['IL86'], ['DHC7'], ['T6'], ['PC21'], ['AN2']]),
+  ['jet', 'quad', 'quad', 'turboprop', 'turboprop', 'light'],
+  'a twin-engined P-8, four-engined IL-86 and Dash 7, turboprop trainers, a piston An-2',
+);
+eq(
+  shapes([['C135'], ['C141'], ['C160'], ['C212'], ['C152'], ['C206']]),
+  ['quad', 'quad', 'turboprop', 'turboprop', 'light', 'light'],
+  'military types with a Cessna-like designator are not light aircraft',
+);
+eq(
   T.head('3C6551', climb, { cs: 'DLH8AB', type: 'A321', x: { category: 'A3' } }).properties.shape,
   'jet',
   'the icon carries its symbol',
