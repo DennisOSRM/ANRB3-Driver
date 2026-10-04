@@ -1108,35 +1108,42 @@
     }));
   }
 
+  /* Registration records are asked for a few at a time, through one queue:
+   every aircraft on the map is looked up for its symbol, not only the ones
+   whose popup is opened, and a page opened on a busy sky would otherwise send
+   the bridge, and the bridge hexdb.io, a request for every aircraft at once.
+   The bridge keeps the answers for days, so an airframe is asked for once
+   however often it comes back. An opened popup goes to the front of the
+   queue, since someone is waiting for it. */
+  const AIRCRAFT_ASKS = 4;
+  let aircraftQueue = new Set();
+  let aircraftAsking = 0;
+  function queueAircraft(icao, first) {
+    if (!lookups || planeInfo.has(icao) || asking.has(icao)) return;
+    if (first) aircraftQueue = new Set([icao, ...aircraftQueue]);
+    else aircraftQueue.add(icao);
+    pumpAircraft();
+  }
+  function pumpAircraft() {
+    for (const icao of aircraftQueue) {
+      if (aircraftAsking >= AIRCRAFT_ASKS) return;
+      aircraftQueue.delete(icao);
+      if (!fleet.has(icao) || planeInfo.has(icao) || asking.has(icao)) continue; // gone, or known
+      aircraftAsking++;
+      askAircraft(icao).finally(() => {
+        aircraftAsking--;
+        pumpAircraft();
+      });
+    }
+  }
+
   /* The type designator of an aircraft on the map, for its symbol, or null
-   until it is known. Every aircraft shown is looked up, not only the ones
-   whose popup is opened, but a few at a time: a page opened on a busy sky
-   would otherwise send the bridge, and the bridge hexdb.io, a request for
-   every aircraft at once. The bridge keeps the answers for days, so an
-   airframe is asked for once however often it comes back. */
-  const TYPE_ASKS = 4;
-  const typeQueue = new Set();
-  let typeAsking = 0;
+   until it is known. */
   function typeOf(icao) {
     const i = planeInfo.get(icao);
     if (i && i !== 'none') return i.code || null;
-    if (lookups && !i && !asking.has(icao) && !typeQueue.has(icao)) {
-      typeQueue.add(icao);
-      pumpTypes();
-    }
+    queueAircraft(icao, false);
     return null;
-  }
-  function pumpTypes() {
-    for (const icao of typeQueue) {
-      if (typeAsking >= TYPE_ASKS) return;
-      typeQueue.delete(icao);
-      if (!fleet.has(icao) || planeInfo.has(icao)) continue; // gone, or the popup asked
-      typeAsking++;
-      askAircraft(icao).finally(() => {
-        typeAsking--;
-        pumpTypes();
-      });
-    }
   }
 
   /* Fill in what is cached, and ask for what is not. Called when a popup opens. */
@@ -1144,7 +1151,7 @@
     // A bridge started without lookups answers none of these, and says so in
     // every update: asking anyway would be a round trip per popup for a 404.
     if (!lookups) return;
-    askAircraft(icao);
+    queueAircraft(icao, true);
     const cs = (a.meta.cs || '').trim();
     if (cs)
       ask(routeInfo, cs, API + '/route/' + encodeURIComponent(cs), (j) => ({
