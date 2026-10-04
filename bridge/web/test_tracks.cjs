@@ -89,6 +89,141 @@ eq(h.geometry.coordinates, [8.31, 50.11], 'the icon sits on the most recent poin
 eq(h.properties.trk, 68, 'and carries the track for icon-rotate');
 ok(T.head('X', [], {}) === null, 'an aircraft with no positions gets no icon');
 
+// --- the markers after the callsign ---------------------------------------
+eq(
+  T.ornaments({}),
+  { mil: false, ap: false, trend: '', fl: '', spd: '' },
+  'nothing known, nothing drawn',
+);
+eq(T.ornaments({ mil: true }).mil, true, 'a military address is marked');
+eq(
+  T.ornaments({ alt: 34975, gs: 451.6, vr: 1800, x: { target: { modes: ['AP', 'LNAV'] } } }),
+  { mil: false, ap: true, trend: 'climb', fl: 'FL350', spd: '452kt' },
+  'autopilot on, climbing, FL350, and the speed rounded to the knot',
+);
+eq(
+  T.ornaments({ vr: -T.CLIMB_FPM, x: { target: { modes: ['LNAV'] } } }).ap,
+  false,
+  'a mode other than AP is not the autopilot',
+);
+eq(T.ornaments({ vr: -T.CLIMB_FPM }).trend, 'descend', 'the threshold counts as descending');
+eq(T.ornaments({ vr: T.CLIMB_FPM - 1 }).trend, '', 'just under it is level');
+eq(T.ornaments({ vr: 0 }).trend, '', 'level is no arrow');
+eq(T.ornaments({ vr: 2000, gnd: 1 }).trend, '', 'on the ground a vertical rate means nothing');
+eq(T.ornaments({ gs: 0 }).spd, '0kt', 'standing still is a known speed');
+eq(T.ornaments({ alt: 4500 }).fl, 'FL045', 'a flight level is always three digits');
+eq(T.ornaments({ alt: 0 }).fl, 'FL000', 'sea level is FL000');
+eq(T.ornaments({ alt: -350 }).fl, 'FL000', 'and nothing reads lower');
+eq(T.ornaments({ alt: 1200, gnd: 1 }).fl, '', 'on the ground there is no flight level');
+// Parts in label order: arrow, AP, M on the callsign's line; FL, speed under it.
+eq(
+  T.labelParts({ mil: true, ap: true, trend: 'climb', fl: 'FL350', spd: '452kt' }),
+  [' ▲', ' AP', ' M', '\nFL350', ' 452kt'],
+  'everything known: markers after the callsign, figures on the line under it',
+);
+eq(
+  T.labelParts({ mil: true, ap: false, trend: '', fl: '', spd: '452kt' }),
+  ['', '', ' M', '', '\n452kt'],
+  'a missing marker leaves no gap, and the figures start their line without a space',
+);
+eq(
+  T.labelParts({ mil: false, ap: false, trend: 'descend', fl: 'FL045', spd: '' }),
+  [' ▼', '', '', '\nFL045', ''],
+  'flight level alone',
+);
+eq(
+  T.labelParts({ mil: false, ap: true, trend: '', fl: '', spd: '' }),
+  ['', ' AP', '', '', ''],
+  'markers without figures: no second line',
+);
+eq(
+  T.labelParts({ mil: false, ap: false, trend: '', fl: '', spd: '' }),
+  ['', '', '', '', ''],
+  'nothing known: the label is the callsign alone',
+);
+const marked = T.head('3C6551', climb, { cs: 'DLH8AB', alt: 12000, gs: 300, vr: -900, x: {} });
+eq(
+  ['trend', 'ap', 'mil', 'fl', 'spd'].map((k) => marked.properties[k]),
+  [' ▼', '', '', '\nFL120', ' 300kt'],
+  'the icon carries the parts for its label',
+);
+
+// --- the symbol --------------------------------------------------------
+const shapes = (pairs) => pairs.map(([code, cat]) => T.shape(code, cat));
+eq(
+  shapes([
+    ['A388'],
+    ['B744'],
+    ['B461'],
+    ['C130'],
+    ['B77W'],
+    ['A359'],
+    ['A320'],
+    ['B38M'],
+    ['E190'],
+    ['CRJ9'],
+    ['C68A'],
+    ['GLF6'],
+    ['AT76'],
+    ['DH8D'],
+    ['C208'],
+    ['C172'],
+    ['P28A'],
+    ['SR22'],
+    ['EC35'],
+    ['B105'],
+    ['EUFI'],
+    ['GLID'],
+    ['BALL'],
+  ]),
+  [
+    'quad',
+    'quad',
+    'quad',
+    'quad',
+    'heavy',
+    'heavy',
+    'jet',
+    'jet',
+    'regional',
+    'regional',
+    'bizjet',
+    'bizjet',
+    'turboprop',
+    'turboprop',
+    'turboprop',
+    'light',
+    'light',
+    'light',
+    'heli',
+    'heli',
+    'fighter',
+    'glider',
+    'balloon',
+  ],
+  'the type designator picks the symbol',
+);
+eq(
+  shapes([
+    [null, 'A1'],
+    [null, 'A5'],
+    [null, 'A7'],
+    [null, 'B6'],
+    [null, 'C1'],
+    [null, null],
+  ]),
+  ['light', 'heavy', 'heli', 'drone', 'ground', 'jet'],
+  'without one the emitter category does, and with neither it is a jet',
+);
+eq(T.shape('B744', 'A3'), 'quad', 'a known designator wins over the category');
+eq(T.shape('ZZZZ', 'A7'), 'heli', 'an unlisted designator falls back to the category');
+eq(T.shape('ec35', null), 'heli', 'case does not matter');
+eq(
+  T.head('3C6551', climb, { cs: 'DLH8AB', type: 'A321', x: { category: 'A3' } }).properties.shape,
+  'jet',
+  'the icon carries its symbol',
+);
+
 // --- the history window (fifteen minutes by default) --------------------
 const old = [
   [t0 - 16 * 60, 8, 50, 100],
