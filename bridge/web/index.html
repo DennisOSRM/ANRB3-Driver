@@ -1125,6 +1125,11 @@
     pumpAircraft();
   }
   function pumpAircraft() {
+    // A bridge restarted without lookups would answer every one with a 404.
+    if (!lookups) {
+      aircraftQueue.clear();
+      return;
+    }
     for (const icao of aircraftQueue) {
       if (aircraftAsking >= AIRCRAFT_ASKS) return;
       aircraftQueue.delete(icao);
@@ -1135,6 +1140,16 @@
         pumpAircraft();
       });
     }
+  }
+
+  /* Records are kept for the aircraft on the map, not for every aircraft the
+   page has seen, or a page left open for weeks would hold them all. Once the
+   cache is well past the fleet, everything for an aircraft no longer on the
+   map goes, including answers that landed after it left; one that comes back
+   is asked for again, which the bridge answers from its own cache. */
+  function sweepAircraft() {
+    if (planeInfo.size <= 2 * fleet.size + 200) return;
+    for (const icao of planeInfo.keys()) if (!fleet.has(icao)) planeInfo.delete(icao);
   }
 
   /* The type designator of an aircraft on the map, for its symbol, or null
@@ -1598,6 +1613,7 @@
     document.getElementById('n-rate').textContent = r === null ? '—' : r.toFixed(r < 10 ? 1 : 0);
 
     for (const icao of d.drop) fleet.delete(icao); // quiet for `inactive` seconds: off the map
+    sweepAircraft();
     for (const [icao, u] of Object.entries(d.ac)) {
       let a = fleet.get(icao);
       if (!a) {
