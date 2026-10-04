@@ -54,12 +54,20 @@ user to that group, or run as root.
 
 It reads Beast from the receiver (`--feed sbs` for BaseStation, which is what
 other receivers serve) and serves a map on port 8080 (`--http-port`), with
-tracks coloured by altitude and a panel per aircraft. `--cert` and `--key` serve HTTPS, which the browser
+tracks coloured by altitude and a panel per aircraft. Each aircraft is drawn
+with a symbol for its kind - airliner, widebody, four-engined, regional or
+business jet, turboprop, light aircraft, helicopter, fighter, glider, balloon,
+drone or ground vehicle - and labelled with its callsign, whether it is
+climbing or descending, on autopilot or military, and its flight level and
+ground speed. `--cert` and `--key` serve HTTPS, which the browser
 requires before it will share the viewer's location.
 
 Registration, type, operator, route and a photograph come from
 [hexdb.io](https://hexdb.io/). The bridge asks, not the browser, and keeps the
 answers in `~/.cache/anrb-map` (`--cache DIR`) for ten days, misses included.
+The page asks for the registration of every aircraft it shows, a few at a time,
+because the type picks the symbol; without one, the symbol comes from the
+emitter category the aircraft transmits.
 
 `--no-hexdb` disables it: no outbound request is made, the cache directory is
 not created, the `api/` and `photo/` endpoints answer 404,

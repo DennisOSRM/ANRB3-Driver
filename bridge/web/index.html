@@ -402,6 +402,10 @@
     center: [8.57, 50.05],
     zoom: 7,
     attributionControl: { compact: true },
+    // No fade on labels. MapLibre knows a label from one update to the next by
+    // its text, and a label's flight level and speed change every second or
+    // so: faded, every such label would vanish and fade back in.
+    fadeDuration: 0,
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
@@ -499,41 +503,186 @@
     el.style.display = 'block';
   }, 12000);
 
-  /* A plane drawn once into a canvas, pointed north so icon-rotate can take the
-   aircraft's track directly. White with a dark keyline so it reads over both
-   land and water. */
-  function planeIcon(size) {
+  /* The aircraft symbols (Tracks.shape picks one), each drawn once into a
+   canvas, pointed north so icon-rotate can take the track directly. White
+   with a dark keyline so they read over both land and water.
+
+   Outlines are on a 24-unit grid, given as the right half from the nose round
+   to the tail on the centre line and mirrored for the left. Engines are drawn
+   first, so the wing covers them and only the part ahead of it shows. Each
+   is scaled by roughly how big the aircraft is - a light single is a third
+   the size of a four-engined jet - so size says something on the map too. */
+  const pod = (x, y0, y1, w) => ({ rect: [x - w / 2, y0, w, y1 - y0] });
+  // Engines at xs on the right and mirrored; y0 and y1 are one number for all,
+  // or one per engine where the wing's sweep moves them back.
+  const pods = (xs, y0, y1, w) =>
+    xs.flatMap((x, i) => {
+      const a = [].concat(y0)[i] ?? y0,
+        b = [].concat(y1)[i] ?? y1;
+      return [pod(x, a, b, w), pod(24 - x, a, b, w)];
+    });
+  // prettier-ignore
+  const JET = [
+    [12, 2], [13.6, 9.2], [22, 13.4], [22, 15.4], [13.6, 13.2], [13.1, 19.4], [16, 21.2],
+    [16, 22.4], [12, 21.4],
+  ];
+  // prettier-ignore
+  const WIDE = [
+    [12, 1.5], [13.8, 8.5], [23, 13.2], [23, 15.2], [13.8, 12.8], [13.2, 19.6], [16.6, 21.4],
+    [16.6, 22.6], [12, 21.6],
+  ];
+  // prettier-ignore
+  const SHAPES = {
+    jet: { scale: 1, half: JET },
+    regional: { scale: 0.85, half: JET },
+    heavy: { scale: 1.2, half: WIDE, engines: pods([16.8], 8.2, 12.2, 1.8) },
+    quad: { scale: 1.3, half: WIDE, engines: pods([15.8, 19.4], [7.8, 9.6], [11.4, 13.2], 1.6) },
+    bizjet: {
+      scale: 0.8,
+      half: [
+        [12, 3], [13.2, 7], [13.3, 10], [20.5, 15], [20.5, 16.2], [13.3, 13.6], [13.1, 19],
+        [17, 20.5], [17, 21.6], [12, 21],
+      ],
+      engines: pods([14.9], 14.8, 18.6, 1.8),
+    },
+    turboprop: {
+      scale: 0.9,
+      half: [
+        [12, 2.5], [13.2, 5], [13.3, 9], [22.5, 9.5], [22.5, 11.8], [13.3, 12], [13, 19],
+        [16.5, 19.8], [16.5, 21.4], [12, 21.2],
+      ],
+      engines: pods([16.6], 6.2, 12.6, 1.8),
+    },
+    light: {
+      scale: 0.75,
+      half: [
+        [12, 3], [13.4, 5], [13.4, 7.4], [22, 7.6], [22, 10.8], [13.4, 11], [12.8, 17.6],
+        [16, 18], [16, 20.4], [12, 20.4],
+      ],
+    },
+    glider: {
+      scale: 0.9,
+      half: [
+        [12, 4], [13, 6], [13, 9.2], [23.5, 9.8], [23.5, 11.6], [13, 12], [12.6, 19],
+        [15, 19.3], [15, 20.8], [12, 20.8],
+      ],
+    },
+    fighter: {
+      scale: 0.8,
+      half: [
+        [12, 1.5], [13, 6], [13.4, 10], [20, 17.5], [20, 19], [13.6, 18.5], [13.6, 20],
+        [15.6, 22], [15.6, 22.6], [12, 21.8],
+      ],
+    },
+    heli: {
+      scale: 0.85,
+      rotor: [12, 10.5, 9],
+      body: [
+        { ellipse: [12, 10.5, 3, 4.6] },
+        { rect: [11.1, 14, 1.8, 7.6] },
+        { rect: [9.8, 20.4, 4.4, 1.2] },
+      ],
+    },
+    balloon: {
+      scale: 0.75,
+      body: [{ ellipse: [12, 10, 7.5, 7.5] }, { rect: [10.5, 19, 3, 2.6] }],
+    },
+    drone: {
+      scale: 0.6,
+      body: [
+        { rect: [10, 10, 4, 4] },
+        ...[
+          [6, 6],
+          [18, 6],
+          [6, 18],
+          [18, 18],
+        ].map(([x, y]) => ({ ellipse: [x, y, 3.2, 3.2] })),
+      ],
+      arms: [
+        [6, 6, 18, 18],
+        [18, 6, 6, 18],
+      ],
+    },
+    ground: {
+      scale: 0.5,
+      body: [{ rect: [7, 3, 10, 18, 2.5] }],
+      mark: [
+        [12, 6],
+        [15, 11],
+        [9, 11],
+      ],
+    },
+  };
+
+  function shapeIcon(name) {
+    const sh = SHAPES[name],
+      size = 2 * Math.round(20 * sh.scale);
     const c = document.createElement('canvas');
     c.width = c.height = size;
     const x = c.getContext('2d'),
       s = size / 24;
-    x.translate(size / 2, size / 2);
     x.scale(s, s);
-    x.translate(-12, -12);
-    x.beginPath();
-    x.moveTo(12, 2);
-    x.lineTo(13.6, 9.2);
-    x.lineTo(22, 13.4);
-    x.lineTo(22, 15.4);
-    x.lineTo(13.6, 13.2);
-    x.lineTo(13.1, 19.4);
-    x.lineTo(16, 21.2);
-    x.lineTo(16, 22.4);
-    x.lineTo(12, 21.4);
-    x.lineTo(8, 22.4);
-    x.lineTo(8, 21.2);
-    x.lineTo(10.9, 19.4);
-    x.lineTo(10.4, 13.2);
-    x.lineTo(2, 15.4);
-    x.lineTo(2, 13.4);
-    x.lineTo(10.4, 9.2);
-    x.closePath();
-    x.fillStyle = '#ffffff';
-    x.fill();
-    x.lineWidth = 1.1;
-    x.strokeStyle = '#10141b';
     x.lineJoin = 'round';
-    x.stroke();
+    x.strokeStyle = '#10141b';
+    x.lineWidth = 1.1 / sh.scale; // the same keyline whatever the scale
+    const paint = (fill) => {
+      x.fillStyle = fill;
+      x.fill();
+      x.stroke();
+    };
+    if (sh.rotor) {
+      const [cx, cy, r] = sh.rotor;
+      x.beginPath();
+      x.arc(cx, cy, r, 0, 2 * Math.PI);
+      paint('rgba(255,255,255,0.28)');
+    }
+    if (sh.arms) {
+      x.save();
+      x.lineWidth = 3 / sh.scale;
+      for (const [x0, y0, x1, y1] of sh.arms) {
+        x.beginPath();
+        x.moveTo(x0, y0);
+        x.lineTo(x1, y1);
+        x.strokeStyle = '#10141b';
+        x.stroke();
+        x.lineWidth = 1.4 / sh.scale;
+        x.strokeStyle = '#ffffff';
+        x.stroke();
+        x.lineWidth = 3 / sh.scale;
+      }
+      x.restore();
+    }
+    for (const part of sh.engines || []) {
+      x.beginPath();
+      const [rx, ry, w, h] = part.rect;
+      x.roundRect(rx, ry, w, h, w / 2);
+      paint('#ffffff');
+    }
+    if (sh.half) {
+      x.beginPath();
+      sh.half.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py)));
+      for (let i = sh.half.length - 2; i > 0; i--) x.lineTo(24 - sh.half[i][0], sh.half[i][1]);
+      x.closePath();
+      paint('#ffffff');
+    }
+    for (const part of sh.body || []) {
+      x.beginPath();
+      if (part.ellipse) {
+        const [cx, cy, rx, ry] = part.ellipse;
+        x.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+      } else {
+        const [rx, ry, w, h, r] = part.rect;
+        x.roundRect(rx, ry, w, h, r ?? Math.min(w, h) / 2);
+      }
+      paint('#ffffff');
+    }
+    if (sh.mark) {
+      x.beginPath();
+      sh.mark.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py)));
+      x.closePath();
+      x.fillStyle = '#10141b';
+      x.fill();
+    }
     return x.getImageData(0, 0, size, size);
   }
 
@@ -659,7 +808,8 @@
   }
 
   map.on('load', () => {
-    map.addImage('plane', planeIcon(40), { pixelRatio: 2 });
+    for (const name of Object.keys(SHAPES))
+      map.addImage('plane-' + name, shapeIcon(name), { pixelRatio: 2 });
 
     nightPalette();
 
@@ -773,21 +923,52 @@
       },
     });
 
+    // How the parts after a callsign are set.
+    const STATE = { 'font-scale': 0.82, 'text-font': ['literal', ['Noto Sans Regular']] };
     map.addLayer({
       id: 'planes',
       type: 'symbol',
       source: 'planes',
       layout: {
-        'icon-image': 'plane',
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.45, 12, 0.72],
-        'icon-rotate': ['coalesce', ['get', 'trk'], 0],
+        'icon-image': ['concat', 'plane-', ['get', 'shape']],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.56, 12, 0.9],
+        // A balloon has no nose to point along its track.
+        'icon-rotate': [
+          'case',
+          ['==', ['get', 'shape'], 'balloon'],
+          0,
+          ['coalesce', ['get', 'trk'], 0],
+        ],
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
-        'text-field': ['coalesce', ['get', 'cs'], ['get', 'icao']],
+        // The callsign with whichever markers are known after it, and the
+        // figures on a line under it (Tracks.labelParts). Both smaller and the
+        // figures in the regular weight, so the callsign still leads. Each
+        // part carries its own space or line break.
+        'text-field': [
+          'format',
+          ['coalesce', ['get', 'cs'], ['get', 'icao']],
+          {},
+          ['get', 'trend'],
+          STATE,
+          ['get', 'ap'],
+          { ...STATE, 'text-font': ['literal', ['Noto Sans Bold']], 'text-color': '#ffb454' },
+          ['get', 'mil'],
+          { ...STATE, 'text-font': ['literal', ['Noto Sans Bold']], 'text-color': '#b9cf7a' },
+          ['get', 'fl'],
+          { ...STATE, 'text-color': '#9aa8b8' },
+          ['get', 'spd'],
+          { ...STATE, 'text-color': '#9aa8b8' },
+        ],
         'text-font': ['Noto Sans Bold'],
         'text-size': 11.5,
-        'text-offset': [0, 1.25],
-        'text-anchor': 'top',
+        // Under the aircraft where there is room; where another label or
+        // aircraft is in the way, beside it on the right, then the left, then
+        // above, and only with all four taken is the label left out. Each
+        // side's lines line up toward the aircraft.
+        'text-variable-anchor': ['top', 'left', 'right', 'bottom'],
+        'text-radial-offset': 1.45,
+        'text-justify': 'auto',
         'text-allow-overlap': false,
         'text-optional': true,
       },
@@ -914,12 +1095,10 @@
     }
   }
 
-  /* Fill in what is cached, and ask for what is not. Called when a popup opens. */
-  function lookup(icao, a) {
-    // A bridge started without lookups answers none of these, and says so in
-    // every update: asking anyway would be a round trip per popup for a 404.
-    if (!lookups) return;
-    ask(planeInfo, icao, API + '/aircraft/' + icao, (j) => ({
+  /* The registration record behind an address: the popup shows it, and its
+   type designator picks the symbol. */
+  function askAircraft(icao) {
+    return ask(planeInfo, icao, API + '/aircraft/' + icao, (j) => ({
       reg: j.Registration,
       type: j.Type,
       code: j.ICAOTypeCode,
@@ -927,6 +1106,67 @@
       owner: j.RegisteredOwners,
       flag: j.OperatorFlagCode,
     }));
+  }
+
+  /* Registration records are asked for a few at a time, through one queue:
+   every aircraft on the map is looked up for its symbol, not only the ones
+   whose popup is opened, and a page opened on a busy sky would otherwise send
+   the bridge, and the bridge hexdb.io, a request for every aircraft at once.
+   The bridge keeps the answers for days, so an airframe is asked for once
+   however often it comes back. An opened popup goes to the front of the
+   queue, since someone is waiting for it. */
+  const AIRCRAFT_ASKS = 4;
+  let aircraftQueue = new Set();
+  let aircraftAsking = 0;
+  function queueAircraft(icao, first) {
+    if (!lookups || planeInfo.has(icao) || asking.has(icao)) return;
+    if (first) aircraftQueue = new Set([icao, ...aircraftQueue]);
+    else aircraftQueue.add(icao);
+    pumpAircraft();
+  }
+  function pumpAircraft() {
+    // A bridge restarted without lookups would answer every one with a 404.
+    if (!lookups) {
+      aircraftQueue.clear();
+      return;
+    }
+    for (const icao of aircraftQueue) {
+      if (aircraftAsking >= AIRCRAFT_ASKS) return;
+      aircraftQueue.delete(icao);
+      if (!fleet.has(icao) || planeInfo.has(icao) || asking.has(icao)) continue; // gone, or known
+      aircraftAsking++;
+      askAircraft(icao).finally(() => {
+        aircraftAsking--;
+        pumpAircraft();
+      });
+    }
+  }
+
+  /* Records are kept for the aircraft on the map, not for every aircraft the
+   page has seen, or a page left open for weeks would hold them all. Once the
+   cache is well past the fleet, everything for an aircraft no longer on the
+   map goes, including answers that landed after it left; one that comes back
+   is asked for again, which the bridge answers from its own cache. */
+  function sweepAircraft() {
+    if (planeInfo.size <= 2 * fleet.size + 200) return;
+    for (const icao of planeInfo.keys()) if (!fleet.has(icao)) planeInfo.delete(icao);
+  }
+
+  /* The type designator of an aircraft on the map, for its symbol, or null
+   until it is known. */
+  function typeOf(icao) {
+    const i = planeInfo.get(icao);
+    if (i && i !== 'none') return i.code || null;
+    queueAircraft(icao, false);
+    return null;
+  }
+
+  /* Fill in what is cached, and ask for what is not. Called when a popup opens. */
+  function lookup(icao, a) {
+    // A bridge started without lookups answers none of these, and says so in
+    // every update: asking anyway would be a round trip per popup for a 404.
+    if (!lookups) return;
+    queueAircraft(icao, true);
     const cs = (a.meta.cs || '').trim();
     if (cs)
       ask(routeInfo, cs, API + '/route/' + encodeURIComponent(cs), (j) => ({
@@ -1373,10 +1613,14 @@
     document.getElementById('n-rate').textContent = r === null ? '—' : r.toFixed(r < 10 ? 1 : 0);
 
     for (const icao of d.drop) fleet.delete(icao); // quiet for `inactive` seconds: off the map
+    sweepAircraft();
     for (const [icao, u] of Object.entries(d.ac)) {
       let a = fleet.get(icao);
       if (!a) {
-        a = { meta: {}, pts: [] };
+        // Whether the address is in a block a state keeps for its military,
+        // which never changes for an address, so it is looked up once.
+        const c = Countries.lookup(parseInt(icao, 16));
+        a = { meta: {}, pts: [], mil: !!(c && c.military) };
         fleet.set(icao, a);
       }
       a.meta = {
@@ -1389,7 +1633,9 @@
         gnd: u.gnd,
         age: u.age,
         x: u.x || {},
+        mil: a.mil,
       };
+      a.meta.type = typeOf(icao);
       a.lastSeen = d.now - u.age; // on the bridge's clock
       Tracks.append(a.pts, u.new);
       a.pts = Tracks.trim(a.pts, d.now, historyMs); // the bridge's history window
