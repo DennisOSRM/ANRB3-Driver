@@ -104,6 +104,12 @@ The map shows:
 - a panel with all known fields when an aircraft is selected
 - the viewer's position; browsers share it only over HTTPS or from localhost
 
+The page follows the system's colour scheme: a dark map by default, and a
+light map with black aircraft and outlined tracks when the system is set to
+light. Use the light scheme on e-ink readers; they do not identify themselves
+as e-ink to the browser. With reduced motion set, aircraft that go quiet are
+removed without fading out.
+
 ### Lookups
 
 The bridge gets registration, aircraft type, operator, route, airport names
