@@ -156,9 +156,10 @@ the snippet is enough.
 ## Docker
 
 The Dockerfile requires BuildKit. On Linux, install the buildx plugin
-(`docker-buildx` on Debian and Ubuntu).
+(`docker-buildx` on Debian and Ubuntu). It has two targets, `driver` and
+`bridge`. Without `--target`, Docker builds the bridge.
 
-    docker buildx build -f docker/Dockerfile -t anrb --load .
+    docker buildx build -f docker/Dockerfile --target driver -t anrb --load .
     docker run -d --name anrb --restart unless-stopped \
         -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule='c 189:* rmw' \
         --group-add "$(getent group anrb | cut -d: -f3)" \
@@ -193,10 +194,10 @@ Beast receiver does in hardware:
   check each against the portable code.
 
 Formats with the address overlaid on the parity (DF0, 4, 5, 16, 20 and 21)
-cannot be validated on their own. The decoder accepts them only for addresses
-seen at least twice in CRC-validated messages. Two such addresses that differ
-in a single bit are both refused, because one bit error turns one into the
-other.
+cannot be validated on their own. The receiver does not decode them;
+`anrb-replay --overlaid` does. It accepts them only for addresses seen at least
+twice in CRC-validated messages. Two such addresses that differ in a single
+bit are both refused, because one bit error turns one into the other.
 
 A position is published only when two fixes from different messages agree, or
 when a fix agrees with a recent published position. A CPR pair from a repaired
