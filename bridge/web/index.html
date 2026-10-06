@@ -39,11 +39,30 @@
     border-radius: 6px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   }
-  #hud {
+  /* The status card and the legend share the left edge: one at the top, one
+     at the bottom, never overlapping. On a short screen the status card gives
+     up height first and scrolls. */
+  #side {
+    position: absolute;
     top: 12px;
+    bottom: 12px;
     left: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    pointer-events: none;
+  }
+  #side .card {
+    position: static;
+    pointer-events: auto;
+  }
+  #hud {
     padding: 12px 14px;
     min-width: 210px;
+    min-height: 0;
+    overflow-y: auto;
   }
   #hud h1 {
     margin: 0 0 2px;
@@ -99,8 +118,7 @@
     max-width: 70vw;
   }
   #legend {
-    bottom: 12px;
-    left: 12px;
+    flex: none;
     padding: 10px 12px;
   }
   #legend .t {
@@ -261,6 +279,11 @@
       max-width: 150px;
     }
   }
+  @media (max-height: 520px) {
+    #legend .note {
+      display: none;
+    }
+  }
 
   /* MapLibre's controls default to white boxes, which glare on a night map.
      The attribution has to stay legible - it is a licence condition - so it
@@ -311,33 +334,35 @@
 
 <div id="map"></div>
 <div id="maperr" class="card">Map failed to load</div>
-<div id="hud" class="card">
-  <h1>RadarBox live</h1>
-  <div class="sub"><span id="dot" class="dot dead"></span><span id="conn">connecting</span></div>
-  <dl>
-    <dt>aircraft</dt>
-    <dd id="n-ac">0</dd>
-    <dt>with track</dt>
-    <dd id="n-tr">0</dd>
-    <dt id="n-ln-t">messages</dt>
-    <dd id="n-ln">0</dd>
-    <dt>messages/s</dt>
-    <dd id="n-rate">—</dd>
-    <dt>points held</dt>
-    <dd id="n-pt">0</dd>
-    <dt>map</dt>
-    <dd id="n-map">loading</dd>
-    <dt>you</dt>
-    <dd id="n-me">locating</dd>
-  </dl>
-</div>
-<div id="legend" class="card">
-  <div class="t">Altitude</div>
-  <div id="ramp"></div>
-  <div class="ticks"><span>0</span><span>20k</span><span>40k ft</span></div>
-  <div class="note">
-    <span class="dash"></span>gap — aircraft was lost and came back inside the
-    <span id="n-hist">15&nbsp;min</span> window
+<div id="side">
+  <div id="hud" class="card">
+    <h1>RadarBox live</h1>
+    <div class="sub"><span id="dot" class="dot dead"></span><span id="conn">connecting</span></div>
+    <dl>
+      <dt>aircraft</dt>
+      <dd id="n-ac">0</dd>
+      <dt>with track</dt>
+      <dd id="n-tr">0</dd>
+      <dt id="n-ln-t">messages</dt>
+      <dd id="n-ln">0</dd>
+      <dt>messages/s</dt>
+      <dd id="n-rate">—</dd>
+      <dt>points held</dt>
+      <dd id="n-pt">0</dd>
+      <dt>map</dt>
+      <dd id="n-map">loading</dd>
+      <dt>you</dt>
+      <dd id="n-me">locating</dd>
+    </dl>
+  </div>
+  <div id="legend" class="card">
+    <div class="t">Altitude</div>
+    <div id="ramp"></div>
+    <div class="ticks"><span>0</span><span>20k</span><span>40k ft</span></div>
+    <div class="note">
+      <span class="dash"></span>gap — aircraft was lost and came back inside the
+      <span id="n-hist">15&nbsp;min</span> window
+    </div>
   </div>
 </div>
 
