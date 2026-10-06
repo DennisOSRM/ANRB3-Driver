@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 #
-# Two images from one build. The default target is the driver, which holds the
+# Two images from one build. `--target driver` is the receiver, which holds the
 # USB device and serves the feeds; `--target bridge` is the map bridge, which
-# reads those feeds over TCP and serves a page.
+# reads those feeds over TCP and serves a page. Without --target, Docker builds
+# the last stage, the bridge.
 #
 # The images are built on one machine and run on another. The compiler always
 # runs natively on the build machine and cross-compiles for the platform asked
@@ -10,7 +11,7 @@
 # platform, so no emulator is involved and the target machine never compiles
 # anything:
 #
-#     docker buildx build --platform linux/arm64 -f docker/Dockerfile -t anrb --load .
+#     docker buildx build --platform linux/arm64 -f docker/Dockerfile --target driver -t anrb --load .
 #     docker buildx build --platform linux/arm64 -f docker/Dockerfile --target bridge -t anrb-map --load .
 #
 # linux/amd64, linux/arm64 (a 64-bit Raspberry Pi) and linux/arm/v7 (a 32-bit
