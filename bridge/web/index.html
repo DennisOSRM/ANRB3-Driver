@@ -574,13 +574,18 @@
         [15.6, 22], [15.6, 22.6], [12, 21.8],
       ],
     },
+    // Two crossed rotor blades over the body, tail boom and tail rotor: a
+    // rotor drawn as a disc reads as a ring at map size.
     heli: {
-      scale: 0.85,
-      rotor: [12, 10.5, 9],
+      scale: 1,
       body: [
-        { ellipse: [12, 10.5, 3, 4.6] },
-        { rect: [11.1, 14, 1.8, 7.6] },
-        { rect: [9.8, 20.4, 4.4, 1.2] },
+        { rect: [10.9, 12, 2.2, 9.6] },
+        { rect: [8.6, 19.8, 6.8, 2] },
+        { ellipse: [12, 9, 3.8, 5.6] },
+      ],
+      blades: [
+        [5, 2.5, 19, 15.5],
+        [19, 2.5, 5, 15.5],
       ],
     },
     balloon: {
@@ -630,28 +635,27 @@
       x.fill();
       x.stroke();
     };
-    if (sh.rotor) {
-      const [cx, cy, r] = sh.rotor;
-      x.beginPath();
-      x.arc(cx, cy, r, 0, 2 * Math.PI);
-      paint('rgba(255,255,255,0.28)');
-    }
-    if (sh.arms) {
+    // Straight bars, white over a wider dark keyline: a drone's arms under its
+    // body, a helicopter's blades over it.
+    const bars = (lines, width) => {
       x.save();
-      x.lineWidth = 3 / sh.scale;
-      for (const [x0, y0, x1, y1] of sh.arms) {
-        x.beginPath();
-        x.moveTo(x0, y0);
-        x.lineTo(x1, y1);
-        x.strokeStyle = '#10141b';
-        x.stroke();
-        x.lineWidth = 1.4 / sh.scale;
-        x.strokeStyle = '#ffffff';
-        x.stroke();
-        x.lineWidth = 3 / sh.scale;
+      x.lineCap = 'round';
+      for (const [w, colour] of [
+        [width + 1.6, '#10141b'],
+        [width, '#ffffff'],
+      ]) {
+        x.lineWidth = w / sh.scale;
+        x.strokeStyle = colour;
+        for (const [x0, y0, x1, y1] of lines) {
+          x.beginPath();
+          x.moveTo(x0, y0);
+          x.lineTo(x1, y1);
+          x.stroke();
+        }
       }
       x.restore();
-    }
+    };
+    if (sh.arms) bars(sh.arms, 1.4);
     for (const part of sh.engines || []) {
       x.beginPath();
       const [rx, ry, w, h] = part.rect;
@@ -676,6 +680,7 @@
       }
       paint('#ffffff');
     }
+    if (sh.blades) bars(sh.blades, 1.8);
     if (sh.mark) {
       x.beginPath();
       sh.mark.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py)));
