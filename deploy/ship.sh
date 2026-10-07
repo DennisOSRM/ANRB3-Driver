@@ -56,19 +56,20 @@ fi
 if $on_target; then
     # The files git tracks, as they are in the working tree: the same sources
     # a build here would use, without build output or untracked files. They
-    # are removed again after the build. Build cache older than 30 days is
-    # pruned; newer cache keeps the next build to the changed crates.
+    # are removed again when the build ends, whether it worked or not. Build
+    # cache older than 30 days is pruned; newer cache keeps the next build to
+    # the changed crates.
     echo "sending the sources to $host"
     (cd "$here" && git ls-files -z | tar --null -T - -cf -) |
         ssh "$host" 'rm -rf anrb/src && mkdir -p anrb/src && tar -x -C anrb/src'
     echo "building for $platform on $host"
     ssh "$host" "set -e; cd anrb/src
+        trap 'rm -rf ~/anrb/src' EXIT
         for target in driver bridge; do
             name=anrb; [ \$target = bridge ] && name=anrb-map
             docker buildx build --platform $platform -f docker/Dockerfile \
                 --target \$target -t \$name:latest --load .
         done
-        cd .. && rm -rf src
         docker buildx prune -f --filter until=720h >/dev/null"
 else
     echo "building for $platform"
@@ -82,6 +83,8 @@ else
     docker save anrb:latest anrb-map:latest | gzip -1 | ssh "$host" 'gunzip | docker load'
 fi
 
-# .env may hold other settings; only the group's line is replaced.
-ssh "$host" "touch anrb/.env && { grep -v '^ANRB_USB_GID=' anrb/.env; echo ANRB_USB_GID=$gid; } > anrb/.env.new && mv anrb/.env.new anrb/.env"
+# .env may hold other settings; only the group's line is replaced. The new
+# file starts as a copy of the old one, so it keeps the old one's permissions.
+ssh "$host" "cd anrb && touch .env && cp -p .env .env.new &&
+    { grep -v '^ANRB_USB_GID=' .env; echo ANRB_USB_GID=$gid; } > .env.new && mv .env.new .env"
 ssh "$host" 'cd anrb && docker compose up -d && docker compose ps'
