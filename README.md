@@ -109,8 +109,9 @@ The map shows:
 
 The **Statistics** button opens the receiver's last 24 hours: the farthest
 range and its bearing, and charts of messages per second and of aircraft on
-the map, per minute. While it is open, the map shows the range as an outline
-around the receiver: the farthest position in each 5° sector. The range needs
+the map, per minute. While it is open, the map shades the area the receiver
+has heard aircraft in: the polygon through the farthest position in each 5°
+sector. The range needs
 the receiver's position, from `--site LAT,LON` or the `ANRB_SITE` environment
 variable. Positions farther than 500 NM are ignored as decoding errors.
 

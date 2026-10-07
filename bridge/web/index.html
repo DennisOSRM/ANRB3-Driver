@@ -1047,13 +1047,24 @@
     const fadeVal = ['coalesce', ['get', 'fade'], 1];
     const fadeTo = (c) => ['interpolate', ['linear'], fadeVal, 0, groundRgb, 1, c];
 
-    // The receiver's range over the last day, and the receiver itself, while
-    // the statistics are open. Under everything else: it is background.
+    // The area the receiver has heard aircraft in over the last day, and the
+    // receiver itself, while the statistics are open: a light tint with a
+    // dashed edge. Under everything else: it is background.
+    map.addLayer({
+      id: 'range-area',
+      type: 'fill',
+      source: 'range',
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {
+        'fill-color': THEME.range,
+        'fill-opacity': LIGHT ? 0.1 : 0.14,
+      },
+    });
     map.addLayer({
       id: 'range-line',
       type: 'line',
       source: 'range',
-      filter: ['==', ['geometry-type'], 'LineString'],
+      filter: ['==', ['geometry-type'], 'Polygon'],
       paint: {
         'line-color': THEME.range,
         'line-width': 1.5,
@@ -1915,7 +1926,7 @@
         features.push({
           type: 'Feature',
           properties: {},
-          geometry: { type: 'LineString', coordinates: ring },
+          geometry: { type: 'Polygon', coordinates: [ring] },
         });
       features.push({
         type: 'Feature',
