@@ -37,6 +37,8 @@ anrb-rx - AirNav RadarBox live receiver
   --no-soft             no soft-decision retry on a failed burst
   --2bit                also try blind two-bit corrections on DF11/DF17, not
                         guided by demodulator confidence
+  --probe HOST:PORT     exit 0 if HOST:PORT accepts a TCP connection, 1 if
+                        not; the container image's health check
   -h, --help            show this help
 ";
 
@@ -89,6 +91,8 @@ struct Config {
 enum Command {
     Run(Config),
     Help,
+    /// Check that something listens at this `host:port`, and do nothing else.
+    Probe(String),
 }
 
 /// The value that follows `flag` on the command line, parsed as a `T`.
@@ -125,6 +129,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Command, String>
             "--2bit" => c.opts.blind2 = true,
             "--plain" => c.plain = true,
             "--server" => c.server = true,
+            "--probe" => return Ok(Command::Probe(value(&mut args, &a)?)),
             "-h" | "--help" => return Ok(Command::Help),
             _ => return Err(format!("unknown argument {a:?}")),
         }
@@ -545,6 +550,13 @@ fn main() {
             print!("{USAGE}");
             return;
         }
+        Ok(Command::Probe(addr)) => {
+            std::process::exit(if anrb::feed::probe(&addr, Duration::from_secs(3)) {
+                0
+            } else {
+                1
+            })
+        }
         Err(msg) => usage_error(&msg),
     };
     // Report a failure as a sentence rather than the Debug form of an io
@@ -836,6 +848,7 @@ mod tests {
         match args(a) {
             Ok(Command::Run(c)) => c,
             Ok(Command::Help) => panic!("{a:?} asked for help"),
+            Ok(Command::Probe(p)) => panic!("{a:?} asked for a probe of {p}"),
             Err(e) => panic!("{a:?}: {e}"),
         }
     }
@@ -890,6 +903,15 @@ mod tests {
         assert_eq!(c.status_every, 0);
         assert!(!c.opts.soft && c.opts.blind2);
         assert!(c.plain && c.server);
+    }
+
+    #[test]
+    fn a_probe_takes_an_address_and_nothing_else_runs() {
+        assert!(matches!(
+            args(&["--server", "--probe", "127.0.0.1:30005"]),
+            Ok(Command::Probe(a)) if a == "127.0.0.1:30005"
+        ));
+        assert_eq!(args(&["--probe"]).err().unwrap(), "--probe needs a value");
     }
 
     #[test]

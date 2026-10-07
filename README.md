@@ -87,6 +87,7 @@ The bridge reads the receiver's Beast feed and serves the map page on port
 | `--cache DIR` | `~/.cache/anrb-map` | hexdb.io cache |
 | `--no-hexdb` | | no lookups |
 | `--logos DIR` | | airline logos |
+| `--probe HOST:PORT` | | exit 0 if `HOST:PORT` accepts a TCP connection, else 1 |
 
 The SBS feed carries fewer fields than Beast: the autopilot state, emitter
 category and other Beast-only fields are missing.
@@ -183,6 +184,10 @@ BaseStation timestamps and log lines are in UTC.
 
 The bridge image reads from `anrb:30005`. Use `--host` to change the receiver
 address.
+
+Both images are based on distroless (`gcr.io/distroless/cc-debian12`), which
+has no shell. Their health checks run the programs with `--probe`, which
+`anrb-rx` also accepts.
 
 ## Decoding
 
