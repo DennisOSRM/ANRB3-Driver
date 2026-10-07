@@ -45,6 +45,11 @@ services:
     restart: unless-stopped
     depends_on:
       - anrb
+    # The receiver's position for the range statistics, LAT,LON in decimal
+    # degrees: set ANRB_SITE in .env beside this file. Without it the map
+    # shows no range.
+    environment:
+      ANRB_SITE: ${ANRB_SITE:-}
     volumes:
       - anrb-map-cache:/var/cache/anrb-map
       - /etc/localtime:/etc/localtime:ro

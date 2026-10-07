@@ -4,10 +4,12 @@
 //! flate2 and TLS via rustls. [`map`] holds the aircraft and their tracks for
 //! the quarter of an hour the page draws. [`hexdb`] looks up registration,
 //! type, operator, route and photograph from hexdb.io and caches them on disk.
+//! [`stats`] keeps the receiver's range and message counts for the last day.
 
 pub mod hexdb;
 pub mod http;
 pub mod map;
+pub mod stats;
 
 use std::sync::{Mutex, MutexGuard};
 

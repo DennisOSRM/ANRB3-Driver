@@ -1,7 +1,8 @@
 /* Track bookkeeping, kept free of the map so it can be tested without a
  * browser. It covers: what counts as a gap, which altitude colours a leg, when
- * a point falls out of the cache, what a label says beside a callsign, and
- * which symbol an aircraft is drawn with.
+ * a point falls out of the cache, what a label says beside a callsign,
+ * which symbol an aircraft is drawn with, and the shapes of the receiver
+ * statistics.
  *
  * Written with var and function so it loads both as a plain script in the page
  * (sets globalThis.Tracks) and as a module under Node (module.exports). */
@@ -295,6 +296,65 @@
     };
   }
 
+  var EARTH_NM = 3440.065; // mean earth radius in nautical miles
+
+  /**
+   * The receiver's range as a closed ring of [lon, lat]: for each sector with
+   * a range, the point that far out on the sector's middle bearing. Sectors
+   * with no range are left out, so the ring joins their neighbours. `site` is
+   * [lat, lon]; `ranges` are nautical miles, one per `sectorDeg` degrees
+   * clockwise from north. Null with fewer than three sectors, which make no
+   * outline.
+   */
+  function rangeRing(site, sectorDeg, ranges) {
+    var rad = Math.PI / 180,
+      lat1 = site[0] * rad,
+      lon1 = site[1] * rad,
+      pts = [];
+    for (var i = 0; i < ranges.length; i++) {
+      if (!(ranges[i] > 0)) continue;
+      var b = (i + 0.5) * sectorDeg * rad,
+        d = ranges[i] / EARTH_NM;
+      var lat2 = Math.asin(
+        Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(b),
+      );
+      var lon2 =
+        lon1 +
+        Math.atan2(
+          Math.sin(b) * Math.sin(d) * Math.cos(lat1),
+          Math.cos(d) - Math.sin(lat1) * Math.sin(lat2),
+        );
+      pts.push([Math.round((lon2 / rad) * 1e5) / 1e5, Math.round((lat2 / rad) * 1e5) / 1e5]);
+    }
+    if (pts.length < 3) return null;
+    pts.push(pts[0]);
+    return pts;
+  }
+
+  /**
+   * An SVG path through `points` ([t, v] in time order) in a `w` by `h` box:
+   * `t0` to `t1` from left to right, 0 to `vmax` from bottom to top. Where
+   * two points are more than `gapS` seconds apart, the line stops and starts
+   * again, rather than bridging time with no data.
+   */
+  function sparkPath(points, t0, t1, vmax, w, h, gapS) {
+    var out = [],
+      last = null;
+    var x = function (t) {
+      return Math.round(((t - t0) / (t1 - t0)) * w * 10) / 10;
+    };
+    var y = function (v) {
+      return Math.round((h - (vmax > 0 ? Math.min(v, vmax) / vmax : 0) * h) * 10) / 10;
+    };
+    for (var i = 0; i < points.length; i++) {
+      var p = points[i];
+      if (p[0] < t0 || p[0] > t1) continue;
+      out.push((last === null || p[0] - last > gapS ? 'M' : 'L') + x(p[0]) + ' ' + y(p[1]));
+      last = p[0];
+    }
+    return out.join(' ');
+  }
+
   /**
    * Everything the two sources need, from the whole fleet. With `opts.now`
    * and `opts.inactive` (seconds, on the bridge's clock) each aircraft's
@@ -336,6 +396,8 @@
     fade: fade,
     ornaments: ornaments,
     labelParts: labelParts,
+    rangeRing: rangeRing,
+    sparkPath: sparkPath,
     shape: shape,
     /** Every listed designator and its symbol, for the tests. */
     designators: function () {

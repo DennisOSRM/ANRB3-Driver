@@ -833,5 +833,71 @@ eq(T.build(new Map([['X', { meta: {}, pts: climb }]])).planes.length, 1, 'build 
   eq(thrown, 'GLID is listed as glider and balloon', 'a designator in two groups is refused');
 }
 
+// --- the receiver statistics -----------------------------------------------
+{
+  const site = [50, 8];
+  const ranges = new Array(72).fill(0);
+  ranges[0] = 60; // north, centred at 2.5 degrees
+  ranges[18] = 60; // east
+  ranges[36] = 60; // south
+  const ring = T.rangeRing(site, 5, ranges);
+  eq(ring.length, 4, 'three sectors make a ring of three points, closed');
+  eq(ring[0], ring[3], 'the ring ends where it starts');
+  ok(Math.abs(ring[0][1] - 51) < 0.01, '60 NM north is a degree of latitude: ' + ring[0]);
+  ok(ring[0][0] > 8 && ring[0][0] < 8.1, 'a little east of north, the middle of the sector');
+  // East is 92.5 degrees, the middle of its sector: a little south of 50.
+  ok(ring[1][1] < 50 && ring[1][1] > 49.9 && ring[1][0] > 9.5, 'east: ' + ring[1]);
+  ok(Math.abs(ring[2][1] - 49) < 0.01, 'south: ' + ring[2]);
+  eq(T.rangeRing(site, 5, [10, 0, 10]), null, 'two sectors make no outline');
+  eq(T.rangeRing(site, 5, new Array(72).fill(0)), null, 'no range, no outline');
+
+  const t0 = 1000;
+  eq(
+    T.sparkPath(
+      [
+        [1000, 0],
+        [1060, 5],
+        [1120, 10],
+      ],
+      t0,
+      1120,
+      10,
+      120,
+      40,
+      90,
+    ),
+    'M0 40 L60 20 L120 0',
+    'points across the box, the highest at the top',
+  );
+  eq(
+    T.sparkPath(
+      [
+        [1000, 5],
+        [1060, 5],
+        [1300, 5],
+        [1360, 20],
+      ],
+      t0,
+      1360,
+      10,
+      360,
+      40,
+      90,
+    ),
+    'M0 20 L60 20 M300 20 L360 0',
+    'a gap starts a new line; values above the top are kept in the box',
+  );
+  eq(
+    T.sparkPath([[900, 1]], t0, 1100, 10, 100, 40, 90),
+    '',
+    'points outside the time span are left out',
+  );
+  eq(
+    T.sparkPath([[1000, 3]], t0, 1100, 0, 100, 40, 90),
+    'M0 40',
+    'nothing to scale by sits at the bottom',
+  );
+}
+
 console.log(checks + ' checks, ' + fails + ' failures');
 process.exit(fails ? 1 : 0);
