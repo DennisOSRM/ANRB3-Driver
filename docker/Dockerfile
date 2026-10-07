@@ -77,7 +77,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # ---- the driver -------------------------------------------------------------
 
-FROM debian:bookworm-slim AS driver
+# Both images run on distroless: glibc, the GCC runtime, time zones and CA
+# certificates, and no shell or package manager - about 20 MB, shared by the
+# two, against about 110 MB for Debian slim. The driver's libusb and libudev
+# need nothing beyond glibc, so they come over from the build as they are.
+FROM gcr.io/distroless/cc-debian12 AS driver
 
 LABEL org.opencontainers.image.title="anrb" \
       org.opencontainers.image.description="AirNav RadarBox driver serving Beast (30005) and BaseStation (30003)" \
@@ -98,15 +102,16 @@ USER 10001:10001
 EXPOSE 30003/tcp 30005/tcp
 
 # The health check connects to the Beast port rather than checking the process.
+# There is no shell to do it with, so the program does it itself.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
-    CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/30005'
+    CMD ["anrb-rx", "--probe", "127.0.0.1:30005"]
 
 ENTRYPOINT ["anrb-rx"]
 CMD ["--server"]
 
 # ---- the bridge -------------------------------------------------------------
 
-FROM debian:bookworm-slim AS bridge
+FROM gcr.io/distroless/cc-debian12 AS bridge
 
 LABEL org.opencontainers.image.title="anrb-map" \
       org.opencontainers.image.description="Live map bridge for the AirNav RadarBox driver" \
@@ -127,7 +132,7 @@ EXPOSE 8080/tcp
 VOLUME ["/var/cache/anrb-map"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'
+    CMD ["anrb-map", "--probe", "127.0.0.1:8080"]
 
 ENTRYPOINT ["anrb-map"]
 CMD ["--root", "/srv/web", "--cache", "/var/cache/anrb-map", "--host", "anrb"]

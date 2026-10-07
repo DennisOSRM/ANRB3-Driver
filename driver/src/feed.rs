@@ -193,6 +193,17 @@ impl Feed {
     }
 }
 
+/// Whether something accepts TCP connections at `addr` (`host:port`), trying
+/// each address it resolves to for at most `timeout`. The container images
+/// have no shell, so their health checks run the programs with `--probe`,
+/// which is this.
+pub fn probe(addr: &str, timeout: Duration) -> bool {
+    use std::net::ToSocketAddrs;
+    addr.to_socket_addrs()
+        .map(|mut all| all.any(|a| TcpStream::connect_timeout(&a, timeout).is_ok()))
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +342,18 @@ mod tests {
             n * m.len() > BACKLOG,
             "dropped only after passing the backlog"
         );
+    }
+
+    /// A probe finds a listener, and finds nothing where there is none or the
+    /// address is not one.
+    #[test]
+    fn a_probe_finds_a_listener() {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let open = l.local_addr().unwrap().to_string();
+        assert!(probe(&open, Duration::from_secs(2)), "listening at {open}");
+        drop(l);
+        assert!(!probe(&open, Duration::from_secs(2)), "closed again");
+        assert!(!probe("not an address", Duration::from_secs(2)));
+        assert!(!probe("127.0.0.1", Duration::from_secs(2)), "no port");
     }
 }

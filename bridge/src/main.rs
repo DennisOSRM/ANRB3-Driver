@@ -43,6 +43,8 @@ anrb-map - the live map's bridge
   --no-hexdb          answer no lookups and make no outbound request at all;
                       nothing is read from or written to the cache, and the
                       page is told not to ask
+  --probe HOST:PORT   exit 0 if HOST:PORT accepts a TCP connection, 1 if not;
+                      the container image's health check
   -h, --help          show this help
 ";
 
@@ -74,6 +76,8 @@ struct Args {
 enum Command {
     Run(Args),
     Help,
+    /// Check that something listens at this `host:port`, and do nothing else.
+    Probe(String),
 }
 
 /// Why the command line was refused.
@@ -135,6 +139,7 @@ fn parse_args(argv: impl IntoIterator<Item = String>, cache: PathBuf) -> Result<
             "--logos" => a.logos = Some(need()?.into()),
             "--cache" => a.cache = need()?.into(),
             "--no-hexdb" => a.hexdb = false,
+            "--probe" => return Ok(Command::Probe(need()?)),
             "-h" | "--help" => return Ok(Command::Help),
             other => return Err(ArgError::Usage(format!("unknown argument {other}"))),
         }
@@ -635,6 +640,13 @@ fn main() -> std::io::Result<()> {
             print!("{USAGE}");
             std::process::exit(0)
         }
+        Ok(Command::Probe(addr)) => {
+            std::process::exit(if anrb::feed::probe(&addr, Duration::from_secs(3)) {
+                0
+            } else {
+                1
+            })
+        }
         Err(ArgError::Usage(msg)) => usage_error(&msg),
         Err(ArgError::Address(msg)) => {
             eprintln!("{msg}");
@@ -761,6 +773,15 @@ mod tests {
             Err(ArgError::Usage(m)) => m,
             other => panic!("{a:?}: {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_probe_takes_an_address_and_nothing_else_runs() {
+        assert!(matches!(
+            args(&["--host", "anrb", "--probe", "127.0.0.1:8080"]),
+            Ok(Command::Probe(a)) if a == "127.0.0.1:8080"
+        ));
+        assert_eq!(usage_err(&["--probe"]), "--probe needs a value");
     }
 
     #[test]
