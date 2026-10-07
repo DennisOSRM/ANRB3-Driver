@@ -142,6 +142,14 @@ and starts them with `deploy/compose.yml`. The local machine needs Docker with
 buildx. The target needs Docker with the Compose plugin. The target does not
 build anything.
 
+    deploy/ship.sh --build-on-target pi@raspberrypi
+
+builds the images on the target instead. `ship.sh` copies the files that git
+tracks to the target, builds there, and removes the copy. The local machine
+then needs no Docker; the target needs Docker with buildx (`docker-buildx` on
+Debian and Ubuntu) and the Compose plugin. Build cache older than 30 days is
+removed after each build.
+
 Both containers run as uid 10001. The receiver container accesses the USB
 device through the `anrb` group. Before the first deployment, create the group
 and install the udev rule on the target. `ship.sh` copies the rule to
