@@ -22,6 +22,7 @@ use anrb::tracker::{Aircraft, Tracker, Update};
 use anrb_map::hexdb::{Hexdb, Lookup};
 use anrb_map::http::{gzip, Handler, Message, Response, Server, WebSocket};
 use anrb_map::map::{self, State};
+use anrb_map::stats;
 
 const USAGE: &str = "\
 anrb-map - the live map's bridge
@@ -40,6 +41,9 @@ anrb-map - the live map's bridge
                       default
   --cache DIR         where to keep what hexdb.io answers (default
                       ~/.cache/anrb-map); made if it is not there
+  --site LAT,LON      the receiver's position in decimal degrees, which the
+                      range statistics are measured from; ANRB_SITE if not
+                      given
   --no-hexdb          answer no lookups and make no outbound request at all;
                       nothing is read from or written to the cache, and the
                       page is told not to ask
@@ -67,12 +71,13 @@ struct Args {
     logos: Option<PathBuf>,
     cache: PathBuf,
     hexdb: bool,
+    site: Option<(f64, f64)>,
 }
 
 /// The outcome of reading the command line.
 #[derive(Debug)]
 enum Command {
-    Run(Args),
+    Run(Box<Args>),
     Help,
 }
 
@@ -86,8 +91,13 @@ enum ArgError {
 }
 
 /// Read the arguments that follow the program name. `cache` is the cache
-/// directory to use when `--cache` is not given.
-fn parse_args(argv: impl IntoIterator<Item = String>, cache: PathBuf) -> Result<Command, ArgError> {
+/// directory to use when `--cache` is not given, and `env_site` the value of
+/// `ANRB_SITE`, used when `--site` is not given.
+fn parse_args(
+    argv: impl IntoIterator<Item = String>,
+    cache: PathBuf,
+    env_site: Option<String>,
+) -> Result<Command, ArgError> {
     let mut a = Args {
         beast: true,
         host: "127.0.0.1".into(),
@@ -99,6 +109,7 @@ fn parse_args(argv: impl IntoIterator<Item = String>, cache: PathBuf) -> Result<
         logos: None,
         cache,
         hexdb: true,
+        site: None,
     };
     let (mut beast_port, mut sbs_port, mut bind, mut port) =
         (30005u16, 30003u16, "0.0.0.0".to_string(), 8080u16);
@@ -135,8 +146,22 @@ fn parse_args(argv: impl IntoIterator<Item = String>, cache: PathBuf) -> Result<
             "--logos" => a.logos = Some(need()?.into()),
             "--cache" => a.cache = need()?.into(),
             "--no-hexdb" => a.hexdb = false,
+            "--site" => {
+                a.site = Some(
+                    stats::parse_site(&need()?)
+                        .map_err(|e| ArgError::Usage(format!("--site {e}")))?,
+                )
+            }
             "-h" | "--help" => return Ok(Command::Help),
             other => return Err(ArgError::Usage(format!("unknown argument {other}"))),
+        }
+    }
+    // An empty ANRB_SITE is the same as none: Compose passes the variable
+    // through whether or not it is set.
+    if let Some(v) = env_site.filter(|v| !v.trim().is_empty()) {
+        if a.site.is_none() {
+            a.site =
+                Some(stats::parse_site(&v).map_err(|e| ArgError::Usage(format!("ANRB_SITE {e}")))?);
         }
     }
     a.feed_port = if a.beast { beast_port } else { sbs_port };
@@ -145,7 +170,7 @@ fn parse_args(argv: impl IntoIterator<Item = String>, cache: PathBuf) -> Result<
         .ok()
         .and_then(|mut it| it.next())
         .ok_or_else(|| ArgError::Address(format!("cannot use {bind}:{port} as an address")))?;
-    Ok(Command::Run(a))
+    Ok(Command::Run(Box::new(a)))
 }
 
 /// Where the cache belongs when nobody says otherwise.
@@ -206,7 +231,31 @@ fn new_state(a: &Args, lookups: bool) -> State {
     if lookups {
         state.serving_lookups();
     }
+    if let Some(site) = a.site {
+        state.set_site(site);
+    }
     state
+}
+
+/// Keep the statistics in the cache directory, so that a restart does not
+/// lose the last day: read them now, and write them every ten minutes. The
+/// file is written beside its final name and renamed into place, so it is
+/// never half written. Not used without the cache, as with `--no-hexdb`.
+fn keep_stats(state: &Arc<State>, dir: &Path) {
+    let file = dir.join("stats.txt");
+    if let Ok(text) = std::fs::read_to_string(&file) {
+        state.load_stats(&text);
+    }
+    let state = Arc::clone(state);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(600));
+        let tmp = file.with_extension("txt.new");
+        if let Err(e) =
+            std::fs::write(&tmp, state.save_stats()).and_then(|()| std::fs::rename(&tmp, &file))
+        {
+            eprintln!("cannot save statistics to {}: {e}", file.display());
+        }
+    });
 }
 
 /// The line printed once the server is listening.
@@ -238,6 +287,10 @@ impl Handler for Bridge {
     fn get(&self, path: &str, query: &str) -> Response {
         if path == "/updates" {
             let json = self.state.updates(param(query, "since"));
+            return Response::gzipped("application/json", gzip(json.as_bytes()));
+        }
+        if path == "/stats" {
+            let json = self.state.stats_json();
             return Response::gzipped("application/json", gzip(json.as_bytes()));
         }
         if let Some(code) = path.strip_prefix("/logo/") {
@@ -629,8 +682,12 @@ fn sbs_line(line: &str, seen: &mut HashMap<u32, Aircraft>) -> Option<(u32, Optio
 }
 
 fn main() -> std::io::Result<()> {
-    let a = match parse_args(std::env::args().skip(1), cache_home()) {
-        Ok(Command::Run(a)) => a,
+    let a = match parse_args(
+        std::env::args().skip(1),
+        cache_home(),
+        std::env::var("ANRB_SITE").ok(),
+    ) {
+        Ok(Command::Run(a)) => *a,
         Ok(Command::Help) => {
             print!("{USAGE}");
             std::process::exit(0)
@@ -644,6 +701,9 @@ fn main() -> std::io::Result<()> {
 
     let hexdb = open_hexdb(&a);
     let state = Arc::new(new_state(&a, hexdb.is_some()));
+    if hexdb.is_some() {
+        keep_stats(&state, &a.cache);
+    }
 
     let (s, host, port, beast) = (Arc::clone(&state), a.host.clone(), a.feed_port, a.beast);
     std::thread::spawn(move || {
@@ -746,12 +806,16 @@ mod tests {
     // ---- the command line --------------------------------------------------
 
     fn args(a: &[&str]) -> Result<Command, ArgError> {
-        parse_args(a.iter().map(|s| s.to_string()), PathBuf::from("/tmp/c"))
+        parse_args(
+            a.iter().map(|s| s.to_string()),
+            PathBuf::from("/tmp/c"),
+            None,
+        )
     }
 
     fn run_args(a: &[&str]) -> Args {
         match args(a) {
-            Ok(Command::Run(a)) => a,
+            Ok(Command::Run(a)) => *a,
             other => panic!("{a:?}: {other:?}"),
         }
     }
@@ -761,6 +825,37 @@ mod tests {
             Err(ArgError::Usage(m)) => m,
             other => panic!("{a:?}: {other:?}"),
         }
+    }
+
+    /// The site comes from --site, or else from ANRB_SITE; an empty
+    /// ANRB_SITE is none, and a bad value of either is refused.
+    #[test]
+    fn the_site_comes_from_the_option_or_the_environment() {
+        let with_env = |a: &[&str], env: &str| match parse_args(
+            a.iter().map(|s| s.to_string()),
+            PathBuf::from("/tmp/c"),
+            Some(env.to_string()),
+        ) {
+            Ok(Command::Run(a)) => Ok(a.site),
+            Err(ArgError::Usage(m)) => Err(m),
+            other => panic!("{a:?} {env:?}: {other:?}"),
+        };
+        assert_eq!(run_args(&[]).site, None);
+        assert_eq!(
+            run_args(&["--site", "50.05,8.57"]).site,
+            Some((50.05, 8.57))
+        );
+        assert_eq!(with_env(&[], "49.9, 8.6"), Ok(Some((49.9, 8.6))));
+        assert_eq!(
+            with_env(&["--site", "50,8"], "49,9"),
+            Ok(Some((50.0, 8.0))),
+            "the option wins"
+        );
+        assert_eq!(with_env(&[], " "), Ok(None), "empty is none");
+        assert!(usage_err(&["--site", "north"]).starts_with("--site north: expected LAT,LON"));
+        assert!(with_env(&[], "x")
+            .unwrap_err()
+            .starts_with("ANRB_SITE x: expected"));
     }
 
     #[test]
@@ -1046,6 +1141,32 @@ mod tests {
         not_found(&b.get("/missing.css", ""), "not found");
         not_found(&b.get("/..", ""), "not found");
         not_found(&b.get("/../../etc/passwd", ""), "not found");
+    }
+
+    /// The statistics are served, measured from the site.
+    #[test]
+    fn the_statistics_are_served() {
+        let dir = TempDir::new();
+        let mut b = bridge(&dir.0, None, None);
+        Arc::get_mut(&mut b.state).unwrap().set_site((50.0, 8.0));
+        b.state.point(0x4009DA, 51.0, 8.0, None, map::now()); // 60 NM north
+        b.state.counters(10, 0, 0, 0);
+        let r = b.get("/stats", "");
+        assert_eq!(
+            (r.status, r.content_type.as_str(), r.gzip),
+            (200, "application/json", true)
+        );
+        let json = gunzip(&r.body);
+        assert!(
+            json.starts_with("{\"site\":[50.00000,8.00000],\"sector\":5,\"range\":[60,0,"),
+            "{json}"
+        );
+        // Saved and read back into a fresh state, the range is still there.
+        let saved = b.state.save_stats();
+        let mut c = State::new("beast");
+        c.set_site((50.0, 8.0));
+        c.load_stats(&saved);
+        assert_eq!(c.stats_json(), b.state.stats_json());
     }
 
     #[test]

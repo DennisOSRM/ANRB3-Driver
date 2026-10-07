@@ -16,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anrb::tracker::Aircraft;
 
 use crate::lock;
+use crate::stats::Stats;
 
 /// How long a track is kept after its last point, in seconds.
 pub const HISTORY: f64 = 15.0 * 60.0;
@@ -74,6 +75,7 @@ struct Inner {
     /// Beast frames or BaseStation lines read since the bridge started.
     messages: u64,
     checks: Checks,
+    stats: Stats,
 }
 
 pub struct State {
@@ -97,11 +99,32 @@ impl State {
                 connected: false,
                 messages: 0,
                 checks: Checks::default(),
+                stats: Stats::new(None),
             }),
             source,
             logos: false,
             lookups: false,
         }
+    }
+
+    /// Where the receiver is, which the range statistics are measured from.
+    pub fn set_site(&mut self, site: (f64, f64)) {
+        lock(&self.inner).stats = Stats::new(Some(site));
+    }
+
+    /// The statistics as the page reads them.
+    pub fn stats_json(&self) -> String {
+        lock(&self.inner).stats.json(now())
+    }
+
+    /// The statistics as text, for [`State::load_stats`] after a restart.
+    pub fn save_stats(&self) -> String {
+        lock(&self.inner).stats.save()
+    }
+
+    /// Read back statistics saved by [`State::save_stats`].
+    pub fn load_stats(&self, text: &str) {
+        lock(&self.inner).stats.load(text, now());
     }
 
     /// Say that `/logo/<code>` will answer.
@@ -127,11 +150,15 @@ impl State {
             implausible,
             resyncs,
         };
+        let t = now();
+        let active = s.ac.values().filter(|r| t - r.last <= INACTIVE).count();
+        s.stats.counts(messages, active, t);
     }
 
     /// A position the tracker has published.
     pub fn point(&self, icao: u32, lat: f64, lon: f64, alt: Option<i32>, now: f64) {
         let mut s = lock(&self.inner);
+        s.stats.position(lat, lon, now);
         let seq = s.seq;
         let r = s.ac.entry(icao).or_default();
         r.last = now;

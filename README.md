@@ -85,6 +85,7 @@ The bridge reads the receiver's Beast feed and serves the map page on port
 | `--cert FILE`, `--key FILE` | | serve HTTPS (PEM files) |
 | `--root DIR` | `web` | directory with `index.html` |
 | `--cache DIR` | `~/.cache/anrb-map` | hexdb.io cache |
+| `--site LAT,LON` | `ANRB_SITE` | receiver position, for the range statistics |
 | `--no-hexdb` | | no lookups |
 | `--logos DIR` | | airline logos |
 
@@ -103,6 +104,20 @@ The map shows:
   military address, and below it the flight level and ground speed
 - a panel with all known fields when an aircraft is selected
 - the viewer's position; browsers share it only over HTTPS or from localhost
+
+### Statistics
+
+The **Statistics** button opens the receiver's last 24 hours: the farthest
+range and its bearing, and charts of messages per second and of aircraft on
+the map, per minute. While it is open, the map shades the area the receiver
+has heard aircraft in: the polygon through the farthest position in each 5°
+sector. The range needs
+the receiver's position, from `--site LAT,LON` or the `ANRB_SITE` environment
+variable. Positions farther than 500 NM are ignored as decoding errors.
+
+The bridge serves the data at `/stats`, and saves it to `stats.txt` in the
+cache directory every 10 minutes, so a restart loses at most the last 10
+minutes. Without the cache (`--no-hexdb`), nothing is saved.
 
 The page follows the system's colour scheme: a dark map by default, and a
 light map with black aircraft and outlined tracks when the system is set to
@@ -153,6 +168,11 @@ and install the udev rule on the target. `ship.sh` copies the rule to
 
 `ship.sh` passes the group ID to Compose. If the group does not exist, it stops
 before building.
+
+For the range statistics, set the receiver's position on the target, in
+`~/anrb/.env`:
+
+    ANRB_SITE=50.0333,8.5706
 
 Compose publishes the bridge on `127.0.0.1:8088` only. `deploy/nginx.conf` is a
 snippet for an existing nginx `server` block that serves the map at `/radar/`,
